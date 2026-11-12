@@ -1,0 +1,4 @@
+{
+	# SagaLib's rule commands (SF_Start, SF_Step, SF_Show, ...); every mod's lists are combined.
+	"ruleCommandPackages":["lastai.sagalib.rulecmd"],
+}

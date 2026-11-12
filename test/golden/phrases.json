@@ -1,0 +1,98 @@
+{
+  "name": "phrases: first match, otherwise, nested quest conditions",
+  "quests": [
+    {
+      "format": 1,
+      "id": "vgc_q",
+      "title": "Q",
+      "kind": "quest",
+      "icon": "",
+      "repeatable": false,
+      "timeLimitDays": 0,
+      "start": {
+        "kind": "manual"
+      },
+      "requires": [],
+      "stages": [
+        {
+          "id": "find",
+          "title": "find",
+          "journal": "",
+          "nextStep": "",
+          "marker": "",
+          "kind": "normal",
+          "renamedFrom": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "pay",
+          "type": "number",
+          "initial": "1"
+        }
+      ],
+      "targets": [],
+      "rewards": [
+        {
+          "id": "done",
+          "credits": 1000
+        }
+      ],
+      "timers": [],
+      "encounters": [],
+      "arrivals": [],
+      "phrases": [],
+      "flags": []
+    }
+  ],
+  "phrases": [
+    {
+      "token": "$vgc_reyes_title",
+      "owner": "vgc_reyes",
+      "mode": "first-match",
+      "cases": [
+        {
+          "when": [
+            "$player.commissionFactionId == vgc_vanguard"
+          ],
+          "text": "Commander"
+        },
+        {
+          "when": [
+            "SF_AtStep vgc_q find",
+            "!$global.vgc_rude"
+          ],
+          "text": "Captain"
+        }
+      ],
+      "otherwise": "Spacer"
+    }
+  ],
+  "steps": [
+    {
+      "token": "$vgc_reyes_title",
+      "is": "Spacer"
+    },
+    {
+      "do": "SF_Step vgc_q find"
+    },
+    {
+      "token": "$vgc_reyes_title",
+      "is": "Captain"
+    },
+    {
+      "do": "$global.vgc_rude = true"
+    },
+    {
+      "token": "$vgc_reyes_title",
+      "is": "Spacer"
+    },
+    {
+      "do": "$player.commissionFactionId = vgc_vanguard"
+    },
+    {
+      "token": "$vgc_reyes_title",
+      "is": "Commander"
+    }
+  ]
+}

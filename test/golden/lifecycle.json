@@ -1,0 +1,122 @@
+{
+  "name": "start, steps, variables, reward, end",
+  "quests": [
+    {
+      "format": 1,
+      "id": "vgc_q",
+      "title": "Q",
+      "kind": "quest",
+      "icon": "",
+      "repeatable": false,
+      "timeLimitDays": 0,
+      "start": {
+        "kind": "manual"
+      },
+      "requires": [],
+      "stages": [
+        {
+          "id": "find",
+          "title": "find",
+          "journal": "",
+          "nextStep": "",
+          "marker": "",
+          "kind": "normal",
+          "renamedFrom": []
+        },
+        {
+          "id": "return",
+          "title": "return",
+          "journal": "",
+          "nextStep": "",
+          "marker": "",
+          "kind": "normal",
+          "renamedFrom": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "pay",
+          "type": "number",
+          "initial": "1"
+        }
+      ],
+      "targets": [],
+      "rewards": [
+        {
+          "id": "done",
+          "credits": 1000
+        }
+      ],
+      "timers": [],
+      "encounters": [],
+      "arrivals": [],
+      "phrases": [],
+      "flags": []
+    }
+  ],
+  "phrases": [],
+  "steps": [
+    {
+      "check": "SF_QuestState vgc_q notStarted",
+      "is": true
+    },
+    {
+      "do": "SF_Step vgc_q find"
+    },
+    {
+      "expect": {
+        "$global.vgc_q_state": "active",
+        "$global.vgc_q_step": "find",
+        "$global.vgc_q_pay": "1"
+      }
+    },
+    {
+      "check": "SF_AtStep vgc_q find",
+      "is": true
+    },
+    {
+      "check": "SF_AtStep vgc_q return",
+      "is": false
+    },
+    {
+      "do": "$global.vgc_q_pay = 2"
+    },
+    {
+      "do": "SF_Step vgc_q return"
+    },
+    {
+      "expect": {
+        "$global.vgc_q_pay": "2",
+        "$global.vgc_q_step": "return"
+      }
+    },
+    {
+      "do": "SF_Reward vgc_q done"
+    },
+    {
+      "expect": {
+        "@credits": "1000"
+      }
+    },
+    {
+      "do": "SF_End vgc_q success"
+    },
+    {
+      "expect": {
+        "$global.vgc_q_state": "success"
+      }
+    },
+    {
+      "check": "SF_QuestDone vgc_q success",
+      "is": true
+    },
+    {
+      "check": "SF_QuestDone vgc_q fail",
+      "is": false
+    },
+    {
+      "check": "SF_QuestDone vgc_q",
+      "is": true
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# Keep line endings as the scripts need them, whatever the cloner's git settings.
+* text=auto
+*.sh text eol=lf
+*.jar binary
+*.png binary

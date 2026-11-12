@@ -1,0 +1,72 @@
+{
+  "name": "a stage of kind success ends the quest",
+  "quests": [
+    {
+      "format": 1,
+      "id": "vgc_q",
+      "title": "Q",
+      "kind": "quest",
+      "icon": "",
+      "repeatable": false,
+      "timeLimitDays": 0,
+      "start": {
+        "kind": "manual"
+      },
+      "requires": [],
+      "stages": [
+        {
+          "id": "find",
+          "title": "find",
+          "journal": "",
+          "nextStep": "",
+          "marker": "",
+          "kind": "normal",
+          "renamedFrom": []
+        },
+        {
+          "id": "won",
+          "title": "won",
+          "journal": "",
+          "nextStep": "",
+          "marker": "",
+          "kind": "success",
+          "renamedFrom": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "pay",
+          "type": "number",
+          "initial": "1"
+        }
+      ],
+      "targets": [],
+      "rewards": [
+        {
+          "id": "done",
+          "credits": 1000
+        }
+      ],
+      "timers": [],
+      "encounters": [],
+      "arrivals": [],
+      "phrases": [],
+      "flags": []
+    }
+  ],
+  "phrases": [],
+  "steps": [
+    {
+      "do": "SF_Step vgc_q find"
+    },
+    {
+      "do": "SF_Step vgc_q won"
+    },
+    {
+      "expect": {
+        "$global.vgc_q_state": "success",
+        "$global.vgc_q_step": "won"
+      }
+    }
+  ]
+}

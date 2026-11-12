@@ -1,0 +1,5 @@
+# Build scratch files (build.sh puts class files outside the mod folder, but just in case)
+.build/
+*.class
+
+*.log

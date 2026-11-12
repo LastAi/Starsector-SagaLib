@@ -1,0 +1,189 @@
+{
+  "name": "save reconciliation after an update",
+  "quests": [
+    {
+      "format": 1,
+      "id": "vgc_q",
+      "title": "Q",
+      "kind": "quest",
+      "icon": "",
+      "repeatable": false,
+      "timeLimitDays": 0,
+      "start": {
+        "kind": "manual"
+      },
+      "requires": [],
+      "stages": [
+        {
+          "id": "search",
+          "title": "search",
+          "journal": "",
+          "nextStep": "",
+          "marker": "",
+          "kind": "normal",
+          "renamedFrom": []
+        },
+        {
+          "id": "return",
+          "title": "return",
+          "journal": "",
+          "nextStep": "",
+          "marker": "",
+          "kind": "normal",
+          "renamedFrom": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "pay",
+          "type": "number",
+          "initial": "1"
+        }
+      ],
+      "targets": [],
+      "rewards": [
+        {
+          "id": "done",
+          "credits": 1000
+        }
+      ],
+      "timers": [],
+      "encounters": [],
+      "arrivals": [],
+      "phrases": [],
+      "flags": []
+    }
+  ],
+  "phrases": [],
+  "steps": [
+    {
+      "do": "SF_Step vgc_q search"
+    },
+    {
+      "reload": [
+        {
+          "format": 1,
+          "id": "vgc_q",
+          "title": "Q",
+          "kind": "quest",
+          "icon": "",
+          "repeatable": false,
+          "timeLimitDays": 0,
+          "start": {
+            "kind": "manual"
+          },
+          "requires": [],
+          "stages": [
+            {
+              "id": "find",
+              "title": "find",
+              "journal": "",
+              "nextStep": "",
+              "marker": "",
+              "kind": "normal",
+              "renamedFrom": [
+                "search"
+              ]
+            },
+            {
+              "id": "return",
+              "title": "return",
+              "journal": "",
+              "nextStep": "",
+              "marker": "",
+              "kind": "normal",
+              "renamedFrom": []
+            }
+          ],
+          "variables": [
+            {
+              "name": "pay",
+              "type": "number",
+              "initial": "1"
+            }
+          ],
+          "targets": [],
+          "rewards": [
+            {
+              "id": "done",
+              "credits": 1000
+            }
+          ],
+          "timers": [],
+          "encounters": [],
+          "arrivals": [],
+          "phrases": [],
+          "flags": []
+        }
+      ]
+    },
+    {
+      "expect": {
+        "$global.vgc_q_step": "find",
+        "$global.vgc_q_state": "active"
+      }
+    },
+    {
+      "reload": [
+        {
+          "format": 1,
+          "id": "vgc_q",
+          "title": "Q",
+          "kind": "quest",
+          "icon": "",
+          "repeatable": false,
+          "timeLimitDays": 0,
+          "start": {
+            "kind": "manual"
+          },
+          "requires": [],
+          "stages": [
+            {
+              "id": "elsewhere",
+              "title": "elsewhere",
+              "journal": "",
+              "nextStep": "",
+              "marker": "",
+              "kind": "normal",
+              "renamedFrom": []
+            }
+          ],
+          "variables": [
+            {
+              "name": "pay",
+              "type": "number",
+              "initial": "1"
+            }
+          ],
+          "targets": [],
+          "rewards": [
+            {
+              "id": "done",
+              "credits": 1000
+            }
+          ],
+          "timers": [],
+          "encounters": [],
+          "arrivals": [],
+          "phrases": [],
+          "flags": []
+        }
+      ]
+    },
+    {
+      "expect": {
+        "$global.vgc_q_step": "__changed",
+        "$global.vgc_q_state": "active"
+      }
+    },
+    {
+      "reload": []
+    },
+    {
+      "expect": {
+        "$global.vgc_q_step": "__changed",
+        "$global.vgc_q_state": "active"
+      }
+    }
+  ]
+}
