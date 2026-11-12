@@ -8,6 +8,13 @@ License: [CC BY 4.0](LICENSE). Changes: [CHANGELOG.md](CHANGELOG.md).
 
 An example mod that uses it, Vanguard Compact, is in the Saga Forge repo (`example/`).
 
+> **Tested, but it needs more testing over time.** SagaLib passes its automated tests and a full
+> in-game walkthrough of the example mod (with 126 other mods enabled), but it is new, and edge
+> cases may have been overlooked. Modders: keep that in mind when you build on it, and test your
+> quests in game. If something behaves oddly, please
+> [open an issue](https://github.com/LastAi/Starsector-SagaLib/issues) with your `starsector.log`
+> (SagaLib's lines start with `[SagaLib]`) and, if you can, the mod's JSON.
+
 ## For players
 
 Install it like any mod when another mod says "made with Saga Forge, needs SagaLib". It does
