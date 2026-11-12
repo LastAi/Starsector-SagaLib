@@ -1,6 +1,6 @@
 # SagaLib runtime format (format 1)
 
-SagaLib (mod id `lastai_sagalib`, CC BY 4.0) runs content made with Saga Forge
+SagaLib (mod id `lastai_sagalib`, MIT) runs content made with Saga Forge
 (`tools/saga-forge`). This file is the contract between Saga Forge's Export and SagaLib.
 The TypeScript copy of the behaviour is `tools/saga-forge/src/shared/play.ts` (Play mode). The
 same golden cases in `test/golden/*.json` run on both sides, so the two can't drift apart.

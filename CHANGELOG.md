@@ -26,5 +26,7 @@ format is frozen: saved class names and fields, and the memory keys, never chang
 - JSON errors are logged with the prefix `[SagaLib]`, the file and the JSON path; the bad object
   is skipped.
 
+License: MIT (changed from CC BY 4.0 on 2026-11-11, the release day).
+
 Tested: 56 Java tests (471 checks), the golden cases shared with Saga Forge's Play mode, and the
 Vanguard Compact walkthrough in game (12 steps, 2026-11-11, with 126 mods enabled).

@@ -4,7 +4,7 @@ A Starsector library (mod id `lastai_sagalib`) that runs quests, characters and 
 made with the **Saga Forge** editor ([Starsector-SagaForge](https://github.com/LastAi/Starsector-SagaForge)).
 Version 1.0, for Starsector 0.98a. From 1.0 on the save format is frozen: saved class names and
 fields, and the memory keys in docs/FORMAT.md, never change.
-License: [CC BY 4.0](LICENSE). Changes: [CHANGELOG.md](CHANGELOG.md).
+License: [MIT](LICENSE). Changes: [CHANGELOG.md](CHANGELOG.md).
 
 An example mod that uses it, Vanguard Compact, is in the Saga Forge repo (`example/`).
 
@@ -14,6 +14,9 @@ An example mod that uses it, Vanguard Compact, is in the Saga Forge repo (`examp
 > quests in game. If something behaves oddly, please
 > [open an issue](https://github.com/LastAi/Starsector-SagaLib/issues) with your `starsector.log`
 > (SagaLib's lines start with `[SagaLib]`) and, if you can, the mod's JSON.
+
+> **Linux: available but untested.** SagaLib is plain Java and has nothing Windows-specific, so it
+> should work on Linux (and macOS), but so far it has only been tested on Windows.
 
 ## For players
 
@@ -51,13 +54,13 @@ JSON path; the bad object is skipped and the game keeps running.
 which test profile to apply, and **Ctrl+F9** on the campaign map opens a menu to apply a profile,
 jump a quest to a step, or reload the JSON from disk. None of this exists outside dev mode.
 
-### Credit
+### License
 
-If you bundle or change SagaLib, credit it, for example:
+MIT: use, bundle, copy or change it freely; keep the `LICENSE` file (copyright notice) with any
+copy. Mods that only list SagaLib as a dependency ship none of its files and owe nothing. A credit
+is welcome but not required, for example:
 
-> Uses SagaLib by LastAi, CC BY 4.0 - https://creativecommons.org/licenses/by/4.0/
-
-Mods that only list SagaLib as a dependency ship none of its files and owe nothing.
+> Uses SagaLib by LastAi - https://github.com/LastAi/Starsector-SagaLib
 
 ## Building
 

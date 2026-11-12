@@ -4,7 +4,7 @@
   "author": "LastAi",
   "utility": true,
   "version": { "major": "1", "minor": "0", "patch": "0" },
-  "description": "Library that runs quests, characters and conversations made with the Saga Forge editor. Needed by mods that say \"made with Saga Forge\"; does nothing by itself. License: CC BY 4.0.",
+  "description": "Library that runs quests, characters and conversations made with the Saga Forge editor. Needed by mods that say \"made with Saga Forge\"; does nothing by itself. License: MIT.",
   "gameVersion": "0.98a-RC8",
   "jars": ["jars/SagaLib.jar"],
   "modPlugin": "lastai.sagalib.SagaLibModPlugin"
