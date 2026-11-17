@@ -3,3 +3,7 @@
 *.class
 
 *.log
+
+# IDE files (IntelliJ): personal, not part of the mod
+.idea/
+*.iml

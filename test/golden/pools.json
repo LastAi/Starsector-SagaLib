@@ -1,0 +1,35 @@
+{
+  "name": "SF_RollPool picks the same entries from the same seeds (SagaLib 1.2 pools)",
+  "quests": [],
+  "phrases": [],
+  "pools": [
+    {
+      "format": 1,
+      "id": "vgc_stories",
+      "draw": "pickOne",
+      "nothing": 2,
+      "entries": [
+        { "id": "pirates", "weight": 3, "conditions": [] },
+        { "id": "survivor", "weight": 2, "conditions": [], "once": "playthrough" },
+        { "id": "rich", "weight": 4, "conditions": ["$player.credits >= 100000"] }
+      ]
+    }
+  ],
+  "steps": [
+    { "do": "$global.sagaforge_seed = 12345\n$player.credits = 50000\n$entity.sagaforge_salvage_seed = 777" },
+    { "do": "SF_RollPool vgc_stories global", "expect": { "$sagaforge_pick": "survivor", "$global.sagaforge_pool_vgc_stories_survivor_count": "1" } },
+    { "do": "SF_RollPool vgc_stories global", "expect": { "$sagaforge_pick": "nothing" } },
+    { "do": "SF_RollPool vgc_stories global", "expect": { "$sagaforge_pick": "pirates" } },
+    { "do": "SF_RollPool vgc_stories global", "expect": { "$sagaforge_pick": "pirates" } },
+    { "do": "SF_RollPool vgc_stories global", "expect": { "$sagaforge_pick": "pirates" } },
+    { "do": "SF_RollPool vgc_stories global", "expect": { "$sagaforge_pick": "pirates", "$global.sagaforge_pool_vgc_stories_draws": "6", "$global.sagaforge_pool_vgc_stories_last": "pirates" } },
+    { "do": "$player.credits = 200000" },
+    { "do": "SF_RollPool vgc_stories", "expect": { "$sagaforge_pick": "rich" } },
+    { "do": "SF_RollPool vgc_stories", "expect": { "$sagaforge_pick": "rich" } },
+    { "do": "SF_RollPool vgc_stories", "expect": { "$sagaforge_pick": "nothing" } },
+    { "do": "SF_RollPool vgc_stories", "expect": { "$sagaforge_pick": "pirates" } },
+    { "do": "SF_RollPool vgc_stories", "expect": { "$sagaforge_pick": "pirates" } },
+    { "do": "SF_RollPool vgc_stories", "expect": { "$sagaforge_pick": "nothing", "$entity.sagaforge_pool_vgc_stories_draws": "6", "$global.sagaforge_pool_vgc_stories_survivor_count": "1" } },
+    { "do": "$global.sagaforge_pool_vgc_stories_force = survivor\nSF_RollPool vgc_stories global", "expect": { "$sagaforge_pick": "survivor", "$global.sagaforge_pool_vgc_stories_survivor_count": "2" } }
+  ]
+}

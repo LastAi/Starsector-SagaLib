@@ -1,0 +1,145 @@
+{
+  "note": "Shared by SagaLib (TranslationTests) and Saga Forge (test/phase8c.test.ts): the keys and fingerprints both must compute.",
+  "fingerprints": {
+    "": "811c9dc5",
+    "Hello": "f55c314b",
+    "Safe travels, “friend” – été.": "cfed5ccf",
+    "Commander $playerLastName": "b09846b7"
+  },
+  "cases": [
+    {
+      "id": "vgc_lost_convoy",
+      "json": {
+        "_sagaforge": {
+          "generated": "x"
+        },
+        "format": 1,
+        "id": "vgc_lost_convoy",
+        "title": "The Lost Convoy",
+        "stages": [
+          {
+            "id": "search",
+            "title": "Find the convoy",
+            "journal": "A Compact convoy went dark."
+          },
+          {
+            "id": "return",
+            "title": "Go back"
+          }
+        ],
+        "start": {
+          "optionText": "Ask about the convoy",
+          "conditions": [
+            "$id == x"
+          ]
+        },
+        "rewards": [
+          {
+            "credits": 1000
+          }
+        ]
+      },
+      "keys": {
+        "vgc_lost_convoy/id": "vgc_lost_convoy",
+        "vgc_lost_convoy/title": "The Lost Convoy",
+        "vgc_lost_convoy/stages[search].id": "search",
+        "vgc_lost_convoy/stages[search].title": "Find the convoy",
+        "vgc_lost_convoy/stages[search].journal": "A Compact convoy went dark.",
+        "vgc_lost_convoy/stages[return].id": "return",
+        "vgc_lost_convoy/stages[return].title": "Go back",
+        "vgc_lost_convoy/start.optionText": "Ask about the convoy",
+        "vgc_lost_convoy/start.conditions[0]": "$id == x"
+      }
+    },
+    {
+      "id": "vgc_people",
+      "json": {
+        "format": 1,
+        "people": [
+          {
+            "id": "vgc_reyes",
+            "name": {
+              "first": "Ilse",
+              "last": "Reyes"
+            },
+            "phrases": [
+              {
+                "token": "$vgc_reyes_title",
+                "cases": [
+                  {
+                    "when": [
+                      "$a == b"
+                    ],
+                    "text": "Commander $playerLastName"
+                  }
+                ],
+                "otherwise": "Captain"
+              }
+            ]
+          }
+        ],
+        "phrases": [
+          {
+            "token": "$vgc_farewell",
+            "cases": [
+              {
+                "text": "Fair winds."
+              },
+              {
+                "text": "Safe travels, “friend” – été."
+              }
+            ]
+          }
+        ]
+      },
+      "keys": {
+        "vgc_people/people[vgc_reyes].id": "vgc_reyes",
+        "vgc_people/people[vgc_reyes].name.first": "Ilse",
+        "vgc_people/people[vgc_reyes].name.last": "Reyes",
+        "vgc_people/people[vgc_reyes].phrases[$vgc_reyes_title].token": "$vgc_reyes_title",
+        "vgc_people/people[vgc_reyes].phrases[$vgc_reyes_title].cases[0].when[0]": "$a == b",
+        "vgc_people/people[vgc_reyes].phrases[$vgc_reyes_title].cases[0].text": "Commander $playerLastName",
+        "vgc_people/people[vgc_reyes].phrases[$vgc_reyes_title].otherwise": "Captain",
+        "vgc_people/phrases[$vgc_farewell].token": "$vgc_farewell",
+        "vgc_people/phrases[$vgc_farewell].cases[0].text": "Fair winds.",
+        "vgc_people/phrases[$vgc_farewell].cases[1].text": "Safe travels, “friend” – été."
+      }
+    },
+    {
+      "id": "vgc_text",
+      "json": {
+        "format": 1,
+        "rules": {
+          "vgc_q_intro": {
+            "t": "Hello $playerName.",
+            "o_yes": "Yes",
+            "a1": "More text."
+          }
+        },
+        "items": {
+          "vgc_box": {
+            "name": "Black box"
+          }
+        },
+        "descriptions": {
+          "vgc_box|RESOURCE": {
+            "text1": "A box."
+          }
+        },
+        "factions": {
+          "vgc_vanguard": {
+            "displayName": "Vanguard"
+          }
+        }
+      },
+      "keys": {
+        "vgc_text/rules.vgc_q_intro.t": "Hello $playerName.",
+        "vgc_text/rules.vgc_q_intro.o_yes": "Yes",
+        "vgc_text/rules.vgc_q_intro.a1": "More text.",
+        "vgc_text/items.vgc_box.name": "Black box",
+        "vgc_text/descriptions.vgc_box|RESOURCE.text1": "A box.",
+        "vgc_text/factions.vgc_vanguard.displayName": "Vanguard"
+      }
+    }
+  ]
+}

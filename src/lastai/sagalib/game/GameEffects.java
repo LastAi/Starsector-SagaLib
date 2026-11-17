@@ -74,4 +74,23 @@ public final class GameEffects implements Effects {
 
     @Override
     public void storyPoints(int points) { Global.getSector().getPlayerStats().addStoryPoints(points, text, false); }
+
+    /** Vanilla's salvage roller on one drop group; the items go to the player with "Gained …" lines. */
+    @Override
+    public void loot(String group, int chances, int value) {
+        try {
+            com.fs.starfarer.api.impl.campaign.procgen.SalvageEntityGenDataSpec.DropData d = new com.fs.starfarer.api.impl.campaign.procgen.SalvageEntityGenDataSpec.DropData();
+            d.group = group;
+            java.util.List<com.fs.starfarer.api.impl.campaign.procgen.SalvageEntityGenDataSpec.DropData> byValue = new java.util.ArrayList<com.fs.starfarer.api.impl.campaign.procgen.SalvageEntityGenDataSpec.DropData>();
+            java.util.List<com.fs.starfarer.api.impl.campaign.procgen.SalvageEntityGenDataSpec.DropData> byChance = new java.util.ArrayList<com.fs.starfarer.api.impl.campaign.procgen.SalvageEntityGenDataSpec.DropData>();
+            if (value > 0) { d.value = value; byValue.add(d); } else { d.chances = Math.max(1, chances); byChance.add(d); }
+            CargoAPI got = com.fs.starfarer.api.impl.campaign.rulecmd.salvage.SalvageEntity.generateSalvage(new java.util.Random(), 1f, 1f, 1f, 1f, byValue, byChance);
+            for (com.fs.starfarer.api.campaign.CargoStackAPI st : got.getStacksCopy()) {
+                cargo().addFromStack(st);
+                if (text != null) AddRemoveCommodity.addStackGainText(st, text);
+            }
+        } catch (Throwable t) {
+            SagaLog.error("reward loot from drop group \"" + group + "\" failed", t);
+        }
+    }
 }

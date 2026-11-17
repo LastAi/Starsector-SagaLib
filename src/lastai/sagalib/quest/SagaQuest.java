@@ -9,6 +9,8 @@ import com.fs.starfarer.api.campaign.rules.MemKeys;
 import com.fs.starfarer.api.campaign.rules.MemoryAPI;
 import com.fs.starfarer.api.characters.PersonAPI;
 import com.fs.starfarer.api.impl.campaign.missions.hub.HubMissionWithBarEvent;
+import com.fs.starfarer.api.impl.campaign.missions.hub.BaseHubMission.EntityLocationType;
+import com.fs.starfarer.api.impl.campaign.missions.hub.BaseHubMission.LocData;
 import com.fs.starfarer.api.ui.SectorMapAPI;
 import com.fs.starfarer.api.ui.TooltipMakerAPI;
 import com.fs.starfarer.api.util.Misc;
@@ -79,6 +81,13 @@ public class SagaQuest extends HubMissionWithBarEvent {
                 SagaLog.errorOnce("giver:" + id, "quest " + id + ": no bar patron could be created", t);
                 return false;
             }
+        }
+
+        // SagaLib 1.2: random targets with vanilla's search; nothing found = not offered (as vanilla's missions)
+        if (!q.targets.isEmpty()) {
+            org.lwjgl.util.vector.Vector2f giverLoc = createdAt != null ? createdAt.getLocationInHyperspace()
+                    : getPerson() != null && getPerson().getMarket() != null ? getPerson().getMarket().getLocationInHyperspace() : null;
+            if (!TargetSearch.run(this, q, giverLoc, mem)) return false;
         }
 
         QuestLogic.initVariables(mem, q);
@@ -208,7 +217,8 @@ public class SagaQuest extends HubMissionWithBarEvent {
     private String stepMarker() {
         QuestDef q = def();
         QuestDef.Stage st = q == null ? null : q.stage(currentStep());
-        return st == null || st.marker == null || st.marker.isEmpty() ? null : st.marker;
+        // a marker may name a random target ($global.<quest>_<var>, SagaLib 1.2): the picked id
+        return st == null || st.marker == null || st.marker.isEmpty() ? null : lastai.sagalib.core.Targets.resolve(GameMemory.global(), st.marker);
     }
 
     /** The entity on the map for a marker id: an entity, a market's primary entity, or a person's market. */
@@ -220,6 +230,12 @@ public class SagaQuest extends HubMissionWithBarEvent {
         if (m != null) return m.getPrimaryEntity();
         PersonAPI p = Global.getSector().getImportantPeople().getPerson(id);
         if (p != null && p.getMarket() != null) return p.getMarket().getPrimaryEntity();
+        return systemCenter(id);
+    }
+
+    /** SagaLib 1.2: a system target's id: its centre (the star, or the empty centre of a starless system). */
+    static SectorEntityToken systemCenter(String id) {
+        for (com.fs.starfarer.api.campaign.StarSystemAPI s : Global.getSector().getStarSystems()) if (id.equals(s.getId())) return s.getCenter();
         return null;
     }
 
@@ -238,7 +254,9 @@ public class SagaQuest extends HubMissionWithBarEvent {
             return;
         }
         PersonAPI p = Global.getSector().getImportantPeople().getPerson(id);
-        if (p != null) makeUnimportant(p, QuestStage.ACTIVE);
+        if (p != null) { makeUnimportant(p, QuestStage.ACTIVE); return; }
+        SectorEntityToken c = systemCenter(id);
+        if (c != null) makeUnimportant(c, QuestStage.ACTIVE);
     }
 
     /** Marks the current step's marker as important (and unmarks the previous one). Also used after a load or reload. */
@@ -251,15 +269,54 @@ public class SagaQuest extends HubMissionWithBarEvent {
         SectorEntityToken e = Global.getSector().getEntityById(want);
         MarketAPI m = e == null ? Global.getSector().getEconomy().getMarket(want) : null;
         PersonAPI p = e == null && m == null ? Global.getSector().getImportantPeople().getPerson(want) : null;
+        if (e == null && m == null && p == null) e = systemCenter(want);
         if (e != null) makeImportant(e, (String) null, QuestStage.ACTIVE);
         else if (m != null) makeImportant(m, (String) null, QuestStage.ACTIVE);
         else if (p != null) makeImportant(p, (String) null, QuestStage.ACTIVE);
         else {
             SagaLog.warnOnce("marker:" + getMissionId() + ":" + want, "quest " + getMissionId() + ": marker \"" + want
-                    + "\" is not an entity, market or person in this game");
+                    + "\" is not an entity, market, person or system in this game");
             return;
         }
         markedId = want;
+    }
+
+    // ------------------------------------------------------------------ at the target (SagaLib 1.2)
+
+    /** RC-R4: vanilla's findOrCreatePerson (someone with one of the posts, else a new person, removed when the mission ends). */
+    PersonAPI personAt(MarketAPI market, String faction, String rank, String... posts) {
+        try {
+            return findOrCreatePerson(faction, market, true, rank == null || rank.isEmpty() ? com.fs.starfarer.api.impl.campaign.ids.Ranks.CITIZEN : rank, posts);
+        } catch (Throwable t) {
+            SagaLog.error("quest " + getMissionId() + ": no person could be found or created at " + market.getId(), t);
+            return null;
+        }
+    }
+
+    /**
+     * RC-R2 (SF_SpawnAtTarget): vanilla's mission spawning near the target, removed when the mission
+     * ends. kind "entity" = a custom entity type (supply_cache, derelict_probe, …), "derelict" = a
+     * derelict ship of a faction. where = vanilla's EntityLocationType (ORBITING_PARAM: around the
+     * target itself).
+     */
+    public SectorEntityToken spawnAtTarget(SectorEntityToken center, String kind, String type, String where) {
+        EntityLocationType lt;
+        try { lt = EntityLocationType.valueOf(where == null || where.isEmpty() ? "ORBITING_PARAM" : where); }
+        catch (IllegalArgumentException e) { lt = EntityLocationType.ORBITING_PARAM; }
+        LocData data = new LocData(lt, center, center.getContainingLocation(), true);
+        SectorEntityToken e = "derelict".equals(kind) ? spawnDerelict(type == null || type.isEmpty() ? null : type, null, data) : spawnEntity(type, data);
+        if (e != null) makeImportant(e, (String) null, QuestStage.ACTIVE);
+        return e;
+    }
+
+    /** The entity a target id stands for: an entity, a market's primary entity, or a system's centre. */
+    public static SectorEntityToken targetEntity(String id) {
+        if (id == null) return null;
+        SectorEntityToken e = Global.getSector().getEntityById(id);
+        if (e != null) return e;
+        MarketAPI m = Global.getSector().getEconomy().getMarket(id);
+        if (m != null) return m.getPrimaryEntity();
+        return systemCenter(id);
     }
 
     // ------------------------------------------------------------------ lookup

@@ -1,6 +1,7 @@
 package lastai.sagalib.model;
 
 import lastai.sagalib.core.JsonReader;
+import lastai.sagalib.core.Targets;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -48,6 +49,8 @@ public final class QuestDef {
     }
 
     public static final class Reward {
+        /** SagaLib 1.2: rolls of drop groups (the mod's or vanilla's). */
+        public final List<SystemDef.Loot> loot = new ArrayList<SystemDef.Loot>();
         public String id;
         public long credits;
         public final List<Amount> rep = new ArrayList<Amount>();
@@ -89,10 +92,49 @@ public final class QuestDef {
     public final List<Timer> timers = new ArrayList<Timer>();
     public final List<EncounterUse> encounters = new ArrayList<EncounterUse>();
     public final List<String> arrivals = new ArrayList<String>();
+    /** SagaLib 1.1: flags on entities while the quest is at some of its steps. */
+    public final List<EntityFlag> entityFlags = new ArrayList<EntityFlag>();
     public final List<PhraseDef> phrases = new ArrayList<PhraseDef>();
     public final List<String> flags = new ArrayList<String>();
+    /** SagaLib 1.2: random targets, searched in this order when the quest is offered. */
+    public final List<Target> targets = new ArrayList<Target>();
+
+    /** One of vanilla's HubMissionWithSearch criteria (core/Targets.CRITERIA) with its arguments (String, Number, Boolean or List of String). */
+    public static final class Criterion {
+        public String id;
+        public final List<Object> args = new ArrayList<Object>();
+    }
+
+    /** A quest variable of type target: what to pick and how (docs/FORMAT.md "Random targets"). */
+    public static final class Target {
+        public String var;
+        /** system | planet | entity | market */
+        public String pick;
+        public boolean systemFirst;
+        public final List<Criterion> require = new ArrayList<Criterion>();
+        public final List<Criterion> prefer = new ArrayList<Criterion>();
+        /** RC-R4: a person at the picked colony (vanilla findOrCreatePerson), or null. */
+        public TargetPerson person;
+    }
+
+    /** A person at a target colony: someone with one of the posts, else a new person of the faction (the colony's if empty). */
+    public static final class TargetPerson {
+        public final List<String> posts = new ArrayList<String>();
+        public String rank;
+        public String faction;
+    }
     /** Where it was read ("data/sagaforge/quests/x.json (mod vgc)"). */
     public String source;
+
+    /** SagaLib 1.1: an entity flag set while the quest is active at one of {@link #steps} (vanilla's setFlag(entity, flag, …, stages)). */
+    public static final class EntityFlag {
+        public String entity;
+        /** An entity memory key, "$sagaforge_<quest>_<node>". */
+        public String flag;
+        public final List<String> steps = new ArrayList<String>();
+        /** Also mark the entity important (Misc.makeImportant: it stands out on the map) while set. */
+        public boolean important;
+    }
 
     public Stage stage(String stageId) {
         if (stageId == null) return null;
@@ -204,7 +246,22 @@ public final class QuestDef {
             q.encounters.add(u);
         }
         q.arrivals.addAll(r.strings(o, "arrivals", path));
-        // "targets" is reserved for random targets (after 1.0): format 1 writes [] and it is ignored.
+        for (JsonReader.Indexed x : r.objects(o, "entityFlags", path)) {
+            EntityFlag f = new EntityFlag();
+            f.entity = r.str(x.json, "entity", x.path, true, null);
+            f.flag = r.str(x.json, "flag", x.path, true, null);
+            if (f.entity == null || f.flag == null) continue;
+            if (!f.flag.startsWith("$")) f.flag = "$" + f.flag;
+            f.steps.addAll(r.strings(x.json, "steps", x.path));
+            Boolean imp = r.bool(x.json, "important", x.path, false);
+            f.important = imp != null && imp;
+            q.entityFlags.add(f);
+        }
+        // SagaLib 1.2: random targets (vanilla's HubMissionWithSearch criteria), searched when the quest is offered
+        for (JsonReader.Indexed x : r.objects(o, "targets", path)) {
+            Target t = parseTarget(r, x, true);
+            if (t != null) q.targets.add(t);
+        }
         for (JsonReader.Indexed e : r.objects(o, "phrases", path)) {
             PhraseDef p = PhraseDef.parse(e.json, e.path, r);
             if (p != null) q.phrases.add(p);
@@ -213,10 +270,58 @@ public final class QuestDef {
         return q;
     }
 
+    /** A random target (quest "targets", or a scatter's "target"): pick, criteria, system first, person. */
+    public static Target parseTarget(JsonReader r, JsonReader.Indexed x, boolean needVar) {
+        Target t = new Target();
+        t.var = r.str(x.json, "var", x.path, needVar, null);
+        t.pick = r.str(x.json, "pick", x.path, true, null);
+        if ((needVar && t.var == null) || t.pick == null) return null;
+        if (!Targets.PICKS.contains(t.pick)) { r.error(x.path, "pick \"" + t.pick + "\" is not one of " + Targets.PICKS); return null; }
+        Boolean sf = r.bool(x.json, "systemFirst", x.path, false);
+        t.systemFirst = sf != null && sf;
+        parseCriteria(r, x, "require", t.require);
+        parseCriteria(r, x, "prefer", t.prefer);
+        JSONObject po = r.obj(x.json, "person", x.path, false);
+        if (po != null) {
+            TargetPerson tp = new TargetPerson();
+            tp.posts.addAll(r.strings(po, "posts", JsonReader.at(x.path, "person")));
+            tp.rank = r.str(po, "rank", JsonReader.at(x.path, "person"), false, "citizen");
+            tp.faction = r.str(po, "faction", JsonReader.at(x.path, "person"), false, null);
+            if (tp.faction != null && tp.faction.isEmpty()) tp.faction = null;
+            if (tp.posts.isEmpty()) r.error(JsonReader.at(x.path, "person"), "a target person needs at least one post");
+            else t.person = tp;
+        }
+        return t;
+    }
+
+    private static void parseCriteria(JsonReader r, JsonReader.Indexed x, String key, List<Criterion> out) {
+        for (JsonReader.Indexed c : r.objects(x.json, key, x.path)) {
+            Criterion cr = new Criterion();
+            cr.id = r.str(c.json, "c", c.path, true, null);
+            if (cr.id == null) continue;
+            if (!Targets.CRITERIA.contains(cr.id)) { r.error(c.path, "unknown target criterion \"" + cr.id + "\" (a newer Saga Forge? update SagaLib)"); continue; }
+            org.json.JSONArray a = r.arr(c.json, "args", c.path);
+            if (a != null) {
+                for (int i = 0; i < a.length(); i++) {
+                    Object v = a.opt(i);
+                    if (v instanceof org.json.JSONArray) {
+                        List<String> l = new ArrayList<String>();
+                        org.json.JSONArray va = (org.json.JSONArray) v;
+                        for (int j = 0; j < va.length(); j++) l.add(String.valueOf(va.opt(j)));
+                        cr.args.add(l);
+                    } else cr.args.add(v);
+                }
+            }
+            out.add(cr);
+        }
+    }
+
     static Reward parseReward(JSONObject o, String path, JsonReader r) {
         Reward rw = new Reward();
         rw.id = r.str(o, "id", path, true, null);
         if (rw.id == null) return null;
+        // SagaLib 1.2 (Phase 8a): random items from drop groups
+        SystemDef.parseLoot(r, o, path, rw.loot);
         Double credits = r.num(o, "credits", path, 0d);
         rw.credits = credits == null ? 0 : Math.round(credits);
         for (JsonReader.Indexed e : r.objects(o, "rep", path)) {

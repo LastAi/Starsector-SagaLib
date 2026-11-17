@@ -4,12 +4,14 @@ import lastai.sagalib.core.Conditions;
 import lastai.sagalib.core.JsonReader;
 import lastai.sagalib.core.MapMemory;
 import lastai.sagalib.core.Phrases;
+import lastai.sagalib.core.Pools;
 import lastai.sagalib.core.Problems;
 import lastai.sagalib.core.QuestLogic;
 import lastai.sagalib.core.Reconciler;
 import lastai.sagalib.core.RuleLine;
 import lastai.sagalib.core.Values;
 import lastai.sagalib.model.PhraseDef;
+import lastai.sagalib.model.PoolDef;
 import lastai.sagalib.model.QuestDef;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -52,6 +54,7 @@ public final class GoldenTests {
         final Conditions conditions = new Conditions(memory, null);
         final Random random = new Random();
         final List<String> spawned = new ArrayList<String>();
+        final Map<String, PoolDef> pools = new LinkedHashMap<String, PoolDef>();
 
         Run(String file) { this.file = file; }
 
@@ -83,7 +86,18 @@ public final class GoldenTests {
             else if ("SF_Step".equals(name)) QuestLogic.step(memory, def, q, args.get(1));
             else if ("SF_End".equals(name)) QuestLogic.end(memory, q, !"fail".equals(args.size() > 1 ? args.get(1) : ""));
             else if ("SF_Reward".equals(name)) QuestLogic.reward(def, q, args.get(1), fx);
-            else if ("SF_Spawn".equals(name)) {
+            else if ("SF_RollPool".equals(name)) {
+                // as the game command: an object's seed ("$entity.sagaforge_salvage_seed" stands in
+                // for Misc.getSalvageSeed) unless "global", then the stored world seed; a dev force key
+                PoolDef pool = pools.get(q);
+                if (pool == null) throw new AssertionError(at + ": no pool " + q);
+                boolean object = !(args.size() > 1 && "global".equals(args.get(1)));
+                String seed = Values.str(memory.get(object ? "$entity.sagaforge_salvage_seed" : Pools.SEED_KEY));
+                String fk = "$global.sagaforge_pool_" + q + "_force";
+                Object f = memory.get(fk);
+                if (f != null) memory.unset(fk);
+                Pools.roll(pool, memory, conditions, Long.parseLong(seed), object, f == null ? null : Values.str(f));
+            } else if ("SF_Spawn".equals(name)) {
                 if (!spawned.contains(q)) spawned.add(q);
             } else if ("SF_Despawn".equals(name)) spawned.remove(q);
             else throw new AssertionError(at + ": the Java golden runner doesn't simulate \"" + name + "\"");
@@ -134,6 +148,12 @@ public final class GoldenTests {
             if (p != null) run.phrases.put(p.token, p);
         }
         T.yes(pp.isEmpty(), f + ": phrases parse: " + pp.all());
+        JSONArray pl = g.optJSONArray("pools");
+        for (int i = 0; pl != null && i < pl.length(); i++) {
+            PoolDef p = PoolDef.parse(pl.getJSONObject(i), new JsonReader(f, pp));
+            if (p != null) run.pools.put(p.id, p);
+        }
+        T.yes(pp.isEmpty(), f + ": pools parse: " + pp.all());
         JSONArray steps = g.getJSONArray("steps");
         for (int i = 0; i < steps.length(); i++) {
             JSONObject s = steps.getJSONObject(i);

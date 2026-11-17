@@ -61,10 +61,8 @@ final class GamePlayer implements Profiles.Player {
 
     @Override
     public void startAt(String entityId) {
-        if (!newGame) {
-            SagaLog.info("profile: startAt " + entityId + " is only used at new game");
-            return;
-        }
+        // dev mode only (profiles are): also mid-game from the dev menu, so a test mod's debug
+        // profile takes the player to its testing area (SagaLib 1.2)
         SectorEntityToken target = Global.getSector().getEntityById(entityId);
         if (target == null && Global.getSector().getEconomy().getMarket(entityId) != null) {
             target = Global.getSector().getEconomy().getMarket(entityId).getPrimaryEntity();

@@ -61,6 +61,14 @@ public final class EncounterLogic {
      * moved to the new id (found in game, 2026-11-11: the ambush left on load after search → find).
      */
     public static Action decide(EncounterDef e, Memory m, double now, Map<String, QuestDef> quests) {
+        return decide(e, m, now, quests, false);
+    }
+
+    /**
+     * As above, with {@code playerNear}: whether the player's fleet is within the encounter's range
+     * of its spawn place (only player-near encounters use it, SagaLib 1.1).
+     */
+    public static Action decide(EncounterDef e, Memory m, double now, Map<String, QuestDef> quests, boolean playerNear) {
         String state = state(m, e.id);
         if (SPAWNED.equals(state)) {
             if (e.despawnOnStageEnd) {
@@ -89,6 +97,19 @@ public final class EncounterLogic {
             }
             return state == null ? Action.SPAWN : Action.NONE;
         }
+        if ("player-near".equals(e.when)) {
+            // with a quest stage: only while the quest is there, and again on a later visit to it
+            if (e.quest != null && e.stage != null) {
+                boolean atStage = QuestLogic.isActive(m, e.quest) && e.stage.equals(QuestLogic.step(m, e.quest));
+                if (!atStage) {
+                    if (state != null) m.unset(stateKey(e.id));
+                    return Action.NONE;
+                }
+                return state == null && playerNear ? Action.SPAWN : Action.NONE;
+            }
+            return m.get(onceKey(e.id)) == null && playerNear ? Action.SPAWN : Action.NONE;
+        }
+        if ("roaming".equals(e.when)) return Action.NONE; // SagaLib 1.2: sent on routes by RoamingFleets
         if ("new-game".equals(e.when)) return m.get(onceKey(e.id)) == null ? Action.SPAWN : Action.NONE;
         if ("periodic".equals(e.when)) {
             Double gone = Values.number(m.get(goneKey(e.id)));
@@ -125,6 +146,14 @@ public final class EncounterLogic {
             m.unset(stageKey(e.id));
         }
         m.set(onceKey(e.id), Boolean.TRUE);
+    }
+
+    /** SagaLib 1.1: how often a named fleet (a template) has been defeated, for quest conditions. */
+    public static String defeatsKey(String template) { return "$global.sagaforge_fleet_" + template + "_defeats"; }
+
+    public static void countDefeat(Memory m, String template) {
+        Double n = Values.number(m.get(defeatsKey(template)));
+        m.set(defeatsKey(template), Float.valueOf((float) ((n == null ? 0 : n) + 1)));
     }
 
     /** A spawn that couldn't happen (logged by the game side): counted as gone, with no outcome. */

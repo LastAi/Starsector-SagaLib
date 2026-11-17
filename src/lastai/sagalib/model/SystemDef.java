@@ -31,6 +31,22 @@ public final class SystemDef {
         public final List<String> submarkets = new ArrayList<String>();
         public boolean freePort;
         public final List<String> people = new ArrayList<String>();
+        /** SagaLib 1.2 (Phase 7e, RC-R11): $core_noDeciv, as vanilla's pirate and Pather bases. */
+        public boolean protectFromDeciv;
+    }
+
+    /** SagaLib 1.2 (RC-F7): a drop group the entity's salvage rolls (vanilla addDropRandom / addDropValue). */
+    public static final class Loot {
+        public String group;
+        public int chances;
+        public int value;
+    }
+
+    /** SagaLib 1.2 (RC-F7): defenders of a salvage entity (vanilla DefenderDataOverride). */
+    public static final class Defenders {
+        public String faction;
+        public float prob = 1f, minStr, maxStr;
+        public int maxSize = 4;
     }
 
     public static final class Entity {
@@ -47,6 +63,35 @@ public final class SystemDef {
         public Orbit orbit = new Orbit();
         public MarketDef market;
         public String where;
+        /** SagaLib 1.1: built only when this quest reaches this stage (or by SF_PlaceEntity); null = with the system. */
+        public StageRef appears;
+        /** SagaLib 1.1: with appears, takes this entity's place (orbit) and removes it. */
+        public String replaces;
+        /** SagaLib 1.1: a planet without a market: its conditions (a condition-only market), and how surveyed it is. */
+        public final List<String> conditions = new ArrayList<String>();
+        public String surveyed;
+        /** SagaLib 1.2 (RC-F7): salvage loot and defenders. */
+        public final List<Loot> loot = new ArrayList<Loot>();
+        public Defenders defenders;
+        /** SagaLib 1.2: its ruins stay unexplored at new game (vanilla marks ruins in a system with a colony explored). */
+        public boolean ruinsUnexplored;
+
+        public boolean deferred() { return appears != null; }
+    }
+
+    /** A quest and one of its stages (SagaLib 1.1). */
+    public static final class StageRef {
+        public String quest;
+        public String stage;
+    }
+
+    /** SagaLib 1.1: an entity removed when a quest reaches a stage (or by SF_RemoveEntity). */
+    public static final class Removal {
+        public String target;
+        public StageRef at;
+        /** "keep" (default: an entity with a market isn't removed) or "decivilize". */
+        public String market = "keep";
+        public String where;
     }
 
     public String id;
@@ -55,7 +100,11 @@ public final class SystemDef {
     public String kind;
     public float hyperX;
     public float hyperY;
+    /** Null for a system without a star (SagaLib 1.1): an empty centre lit by {@link #light}. */
     public String starType;
+    /** Light colour of a starless system, [r, g, b] 0-255. */
+    public int[] light;
+    public final List<Removal> removals = new ArrayList<Removal>();
     public float starRadius;
     public float corona;
     public boolean addToExistingSaves;
@@ -99,12 +148,19 @@ public final class SystemDef {
             }
             s.hyperX = ((Number) h.opt(0)).floatValue();
             s.hyperY = ((Number) h.opt(1)).floatValue();
-            JSONObject star = r.obj(o, "star", "$", true);
-            if (star == null) return null;
-            s.starType = r.str(star, "type", "$.star", true, null);
-            if (s.starType == null) return null;
-            s.starRadius = num(r, star, "radius", "$.star", 500);
-            s.corona = num(r, star, "corona", "$.star", 300);
+            if (o.has("star") && o.isNull("star")) {
+                // SagaLib 1.1: no star, an empty centre and a light colour
+                JSONArray l = o.optJSONArray("light");
+                s.light = new int[] { 255, 255, 255 };
+                if (l != null && l.length() >= 3) for (int i = 0; i < 3; i++) s.light[i] = Math.max(0, Math.min(255, l.optInt(i, 255)));
+            } else {
+                JSONObject star = r.obj(o, "star", "$", true);
+                if (star == null) return null;
+                s.starType = r.str(star, "type", "$.star", true, null);
+                if (s.starType == null) return null;
+                s.starRadius = num(r, star, "radius", "$.star", 500);
+                s.corona = num(r, star, "corona", "$.star", 300);
+            }
         }
         Boolean add = r.bool(o, "addToExistingSaves", "$", false);
         s.addToExistingSaves = add != null && add;
@@ -119,7 +175,35 @@ public final class SystemDef {
             }
             s.entities.add(en);
         }
+        for (JsonReader.Indexed x : r.objects(o, "removals", "$")) {
+            Removal rm = new Removal();
+            rm.where = r.file + " " + x.path;
+            rm.target = r.str(x.json, "target", x.path, true, null);
+            if (rm.target == null) continue;
+            rm.at = stageRef(x.json, x.path, r);
+            rm.market = r.str(x.json, "market", x.path, false, "keep");
+            if (!"keep".equals(rm.market) && !"decivilize".equals(rm.market)) {
+                r.error(JsonReader.at(x.path, "market"), "market is \"keep\" or \"decivilize\"; using keep");
+                rm.market = "keep";
+            }
+            s.removals.add(rm);
+        }
         return s;
+    }
+
+    /** {"quest": q, "stage": s} at key (default: the object itself, for removals). Null if incomplete. */
+    static StageRef stageRef(JSONObject o, String path, JsonReader r) { return stageRef(o, path, r, null); }
+
+    static StageRef stageRef(JSONObject o, String path, JsonReader r, String key) {
+        JSONObject x = key == null ? o : o.optJSONObject(key);
+        String p = key == null ? path : JsonReader.at(path, key);
+        if (x == null) return null;
+        String q = r.str(x, "quest", p, false, null), st = r.str(x, "stage", p, false, null);
+        if (q == null || q.isEmpty() || st == null || st.isEmpty()) return null;
+        StageRef sr = new StageRef();
+        sr.quest = q;
+        sr.stage = st;
+        return sr;
     }
 
     static float num(JsonReader r, JSONObject o, String key, String path, float def) {
@@ -150,6 +234,24 @@ public final class SystemDef {
         e.orbit.radius = num(r, orbit, "radius", op, 0);
         e.orbit.angle = num(r, orbit, "angle", op, 0);
         e.orbit.days = num(r, orbit, "days", op, 100);
+        if (o.has("appears")) {
+            JSONObject ap = o.optJSONObject("appears");
+            if (ap == null) r.error(JsonReader.at(path, "appears"), "appears is {\"quest\": …, \"stage\": …}; ignored");
+            else {
+                // {} or no stage: placed only by SF_PlaceEntity
+                StageRef sr = stageRef(o, path, r, "appears");
+                e.appears = sr != null ? sr : new StageRef();
+            }
+        }
+        e.replaces = r.str(o, "replaces", path, false, null);
+        if (e.replaces != null && e.replaces.isEmpty()) e.replaces = null;
+        if (e.replaces != null && e.appears == null) r.error(JsonReader.at(path, "replaces"), "replaces only works with appears; ignored");
+        e.conditions.addAll(r.strings(o, "conditions", path));
+        e.surveyed = r.str(o, "surveyed", path, false, null);
+        parseLoot(r, o, path, e.loot);
+        Boolean ru = r.bool(o, "ruinsUnexplored", path, false);
+        e.ruinsUnexplored = ru != null && ru;
+        e.defenders = parseDefenders(r, o, path);
         JSONObject m = r.obj(o, "market", path, false);
         if (m != null) {
             String mp = JsonReader.at(path, "market");
@@ -165,8 +267,40 @@ public final class SystemDef {
             Boolean fp = r.bool(m, "freePort", mp, false);
             md.freePort = fp != null && fp;
             md.people.addAll(r.strings(m, "people", mp));
+            Boolean nd = r.bool(m, "protectFromDeciv", mp, false);
+            md.protectFromDeciv = nd != null && nd;
             if (md.faction != null) e.market = md;
         }
         return e;
+    }
+
+    /** "loot": [{"group": "svf_cache", "chances": 3}] or [{"group": "g", "value": 5000}] (format 1 wrote []). */
+    public static void parseLoot(JsonReader r, JSONObject o, String path, List<Loot> out) {
+        for (JsonReader.Indexed x : r.objects(o, "loot", path)) {
+            Loot l = new Loot();
+            l.group = r.str(x.json, "group", x.path, true, null);
+            if (l.group == null) continue;
+            Double c = r.num(x.json, "chances", x.path, 0.0);
+            Double v = r.num(x.json, "value", x.path, 0.0);
+            l.chances = c == null ? 0 : (int) Math.round(c);
+            l.value = v == null ? 0 : (int) Math.round(v);
+            if (l.chances <= 0 && l.value <= 0) { r.error(x.path, "loot needs chances or value"); continue; }
+            out.add(l);
+        }
+    }
+
+    public static Defenders parseDefenders(JsonReader r, JSONObject o, String path) {
+        JSONObject d = r.obj(o, "defenders", path, false);
+        if (d == null) return null;
+        String dp = JsonReader.at(path, "defenders");
+        Defenders df = new Defenders();
+        df.faction = r.str(d, "faction", dp, true, null);
+        if (df.faction == null) return null;
+        Double pr = r.num(d, "prob", dp, 1.0), mn = r.num(d, "minStr", dp, 10.0), mx = r.num(d, "maxStr", dp, 30.0), ms = r.num(d, "maxSize", dp, 4.0);
+        df.prob = pr == null ? 1f : pr.floatValue();
+        df.minStr = mn == null ? 10f : mn.floatValue();
+        df.maxStr = mx == null ? 30f : mx.floatValue();
+        df.maxSize = ms == null ? 4 : ms.intValue();
+        return df;
     }
 }

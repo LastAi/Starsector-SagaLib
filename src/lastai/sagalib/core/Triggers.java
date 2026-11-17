@@ -32,6 +32,18 @@ public final class Triggers {
         return addedText ? After.CONTINUE : After.DISMISS;
     }
 
+    /**
+     * World event actions (SF_event_…) run quietly: text without options ("Gained 100 credits") closes
+     * at once, the news item is what the player sees (seen in game, test 8d). With options, the
+     * event's rule wants to talk to the player: the dialog stays.
+     */
+    public static After after(String trigger, boolean hasOptions, boolean addedText, boolean alreadyClosed) {
+        if (quiet(trigger) && !alreadyClosed && !hasOptions) return After.DISMISS;
+        return after(hasOptions, addedText, alreadyClosed);
+    }
+
+    public static boolean quiet(String trigger) { return trigger != null && (trigger.startsWith("SF_event_") || trigger.startsWith("SF_progress_")); }
+
     public static List<String> queued(Memory m) {
         List<String> out = new ArrayList<String>();
         Object v = m.get(QUEUE_KEY);

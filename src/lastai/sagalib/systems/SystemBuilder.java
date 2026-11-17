@@ -13,8 +13,12 @@ import com.fs.starfarer.api.impl.campaign.ids.Entities;
 import com.fs.starfarer.api.impl.campaign.ids.Factions;
 import com.fs.starfarer.api.impl.campaign.ids.MemFlags;
 import com.fs.starfarer.api.impl.campaign.ids.Terrain;
+import com.fs.starfarer.api.impl.campaign.intel.deciv.DecivTracker;
+import com.fs.starfarer.api.util.Misc;
 import lastai.sagalib.SagaLog;
+import lastai.sagalib.core.Memory;
 import lastai.sagalib.core.SystemPlan;
+import lastai.sagalib.core.WorldChanges;
 import lastai.sagalib.game.GameMemory;
 import lastai.sagalib.game.People;
 import lastai.sagalib.game.Saga;
@@ -67,6 +71,9 @@ public final class SystemBuilder {
                         SagaLog.info("system " + s.id + " is missing from this save; building it (addToExistingSaves)");
                         buildNew(s);
                     }
+                    // built by an older SagaLib, before hyperspace was cleared around new systems: once now
+                    StarSystemAPI built = find(s);
+                    if (built != null && GameMemory.global().get(clearedKey(built)) == null) clearHyperspace(built);
                 } else {
                     addToExisting(s);
                 }
@@ -107,12 +114,21 @@ public final class SystemBuilder {
         for (String t : s.tags) sys.addTag(t);
         sys.getLocation().set(s.hyperX, s.hyperY);
         sys.setBackgroundTextureFilename("graphics/backgrounds/background4.jpg");
-        PlanetAPI star = sys.initStar(s.id + "_star", s.starType, s.starRadius, s.corona);
+        SectorEntityToken star;
+        if (s.starType == null) {
+            // SagaLib 1.1: no star, an empty centre and a light colour (vanilla's black site)
+            star = sys.initNonStarCenter();
+            sys.setLightColor(new Color(s.light[0], s.light[1], s.light[2]));
+        } else {
+            star = sys.initStar(s.id + "_star", s.starType, s.starRadius, s.corona);
+        }
         if (s.music != null && !s.music.isEmpty()) sys.getMemoryWithoutUpdate().set(MusicPlayerPluginImpl.MUSIC_SET_MEM_KEY, s.music);
-        SystemPlan.Order order = SystemPlan.buildOrder(s.entities, GAME);
+        // deferred entities (appears) are placed by their quest later (WorldChanges)
+        SystemPlan.Order order = SystemPlan.buildOrder(WorldChanges.initial(s.entities), GAME);
         int n = build(sys, star, order, s);
         // listed jump points also need this to get their hyperspace side; the fringe one only when none is listed
         sys.autogenerateHyperspaceJumpPoints(true, !s.hasJumpPoint());
+        clearHyperspace(sys);
         SagaLog.info("built system " + s.id + " (" + s.name + ") with " + n + " entities at " + s.hyperX + ", " + s.hyperY);
     }
 
@@ -144,7 +160,9 @@ public final class SystemBuilder {
                 SectorEntityToken made = entity(sys, focus, e);
                 if (made == null) continue;
                 made.setCustomDescriptionId(e.id);
+                salvage(made, e.loot, e.defenders);
                 if (e.market != null) market(made, e.market, e);
+                else if (!e.conditions.isEmpty() || e.surveyed != null) conditions(made, e);
                 GameMemory.global().set(SystemPlan.addedKey(e.id), Boolean.TRUE);
                 n++;
             } catch (Throwable t) {
@@ -222,6 +240,146 @@ public final class SystemBuilder {
         return t;
     }
 
+    /** SagaLib 1.1: an uncolonised planet's conditions and survey level (a condition-only market, as vanilla's). */
+    static void conditions(SectorEntityToken made, SystemDef.Entity e) {
+        if (!(made instanceof PlanetAPI)) {
+            SagaLog.warn(e.where + ": conditions only apply to planets and moons; ignored");
+            return;
+        }
+        PlanetAPI planet = (PlanetAPI) made;
+        Misc.initConditionMarket(planet);
+        MarketAPI m = planet.getMarket();
+        for (String c : e.conditions) {
+            try { m.addCondition(c); } catch (Throwable t) { SagaLog.error(e.where + ": condition \"" + c + "\" failed", t); }
+        }
+        if ("full".equals(e.surveyed)) m.setSurveyLevel(MarketAPI.SurveyLevel.FULL);
+        else if ("preliminary".equals(e.surveyed)) m.setSurveyLevel(MarketAPI.SurveyLevel.PRELIMINARY);
+        else if ("none".equals(e.surveyed)) m.setSurveyLevel(MarketAPI.SurveyLevel.NONE);
+    }
+
+    // ------------------------------------------------------------------ SagaLib 1.1: world changes
+
+    /** Place what is due and remove what is due (after a step change, on load, in the manager tick). */
+    public static void applyWorldChanges() {
+        Memory mem = GameMemory.global();
+        for (WorldChanges.Placement p : WorldChanges.toPlace(Saga.content().systems.values(), mem)) place(p, "its quest reached stage " + p.entity.appears.stage);
+        for (SystemDef.Removal r : WorldChanges.toRemove(Saga.content().systems.values(), mem)) remove(r.target, "decivilize".equals(r.market), r.where);
+        applyEntityFlags(mem);
+    }
+
+    /**
+     * SagaLib 1.1: quests' entity flags, recomputed from the steps (so a load or a jump is right too).
+     * Important flags also make the entity stand out on the map (Misc.makeImportant), as vanilla's missions do.
+     */
+    static void applyEntityFlags(Memory mem) {
+        for (WorldChanges.FlagState s : WorldChanges.entityFlags(Saga.content().quests.values(), mem)) {
+            // the entity may be a random target ($global.<quest>_<var>, SagaLib 1.2), or its market
+            String eid = lastai.sagalib.core.Targets.resolve(mem, s.flag.entity);
+            if (eid == null) continue;
+            SectorEntityToken t = Global.getSector().getEntityById(eid);
+            if (t == null && Global.getSector().getEconomy().getMarket(eid) != null) t = Global.getSector().getEconomy().getMarket(eid).getPrimaryEntity();
+            if (t == null) continue;
+            com.fs.starfarer.api.campaign.rules.MemoryAPI em = t.getMemoryWithoutUpdate();
+            boolean has = em.getBoolean(s.flag.flag);
+            if (s.on && !has) {
+                em.set(s.flag.flag, true);
+                if (s.flag.important) Misc.makeImportant(t, s.flag.flag);
+            } else if (!s.on && has) {
+                em.unset(s.flag.flag);
+                if (s.flag.important) Misc.makeUnimportant(t, s.flag.flag);
+            }
+        }
+    }
+
+    /** SF_PlaceEntity: place a deferred entity now (once). */
+    public static boolean placeById(String id, String why) {
+        WorldChanges.Placement p = WorldChanges.find(Saga.content().systems.values(), id);
+        if (p == null) { SagaLog.error(why + ": no entity \"" + id + "\" in any system file"); return false; }
+        if (!p.entity.deferred()) { SagaLog.warn(why + ": " + id + " is built with its system; nothing to place"); return false; }
+        if (WorldChanges.placed(GameMemory.global(), id)) return true;
+        return place(p, why);
+    }
+
+    static boolean place(WorldChanges.Placement p, String why) {
+        Memory mem = GameMemory.global();
+        SystemDef.Entity e = p.entity;
+        try {
+            if (Global.getSector().getEntityById(e.id) != null) { mem.set(WorldChanges.placedKey(e.id), Boolean.TRUE); return true; }
+            StarSystemAPI sys = p.system.isNew() ? find(p.system) : existing(p.system.id);
+            if (sys == null) {
+                SagaLog.warnOnce("place:" + e.id, e.where + ": its system is not in this game; " + e.id + " not placed");
+                mem.set(WorldChanges.placedKey(e.id), Boolean.TRUE);
+                return false;
+            }
+            SectorEntityToken center = sys.getStar() != null ? sys.getStar() : sys.getCenter();
+            SectorEntityToken old = e.replaces != null ? Global.getSector().getEntityById(e.replaces) : null;
+            SectorEntityToken focus;
+            SystemDef.Entity build = e;
+            if (old != null && old.getOrbitFocus() != null) {
+                // take the replaced entity's place: same focus, where it is now on its orbit
+                focus = old.getOrbitFocus();
+                build = copyWithOrbit(e, old.getCircularOrbitAngle(), old.getCircularOrbitRadius(), old.getCircularOrbitPeriod());
+            } else {
+                focus = "star".equals(e.orbit.focus) ? center : Global.getSector().getEntityById(e.orbit.focus);
+            }
+            if (focus == null) { SagaLog.error(e.where + ": orbit focus \"" + e.orbit.focus + "\" not found; " + e.id + " not placed"); return false; }
+            SectorEntityToken made = entity(sys, focus, build);
+            if (made == null) return false;
+            made.setCustomDescriptionId(e.id);
+            salvage(made, e.loot, e.defenders);
+            if (e.market != null) market(made, e.market, e);
+            else if (!e.conditions.isEmpty() || e.surveyed != null) conditions(made, e);
+            mem.set(WorldChanges.placedKey(e.id), Boolean.TRUE);
+            mem.set(SystemPlan.addedKey(e.id), Boolean.TRUE);
+            SagaLog.info("placed " + e.id + " in " + p.system.id + " (" + why + ")");
+            if (e.replaces != null) {
+                SystemDef.Removal r = WorldChanges.removal(Saga.content().systems.values(), e.replaces);
+                remove(e.replaces, r != null && "decivilize".equals(r.market), e.where + " (replaces)");
+            }
+            return true;
+        } catch (Throwable t) {
+            SagaLog.error(e.where + ": " + e.id + " could not be placed", t);
+            mem.set(WorldChanges.placedKey(e.id), Boolean.TRUE); // don't retry every tick
+            return false;
+        }
+    }
+
+    static SystemDef.Entity copyWithOrbit(SystemDef.Entity e, float angle, float radius, float days) {
+        SystemDef.Entity c = new SystemDef.Entity();
+        c.id = e.id; c.kind = e.kind; c.type = e.type; c.name = e.name; c.radius = e.radius; c.width = e.width; c.count = e.count;
+        c.faction = e.faction; c.market = e.market; c.where = e.where;
+        c.orbit.focus = e.orbit.focus; c.orbit.angle = angle; c.orbit.radius = radius; c.orbit.days = days > 0 ? days : e.orbit.days;
+        return c;
+    }
+
+    /**
+     * Remove an entity (it fades out). Guardrails: it must exist; one with a market is only removed
+     * when decivilize is set (vanilla's DecivTracker), else it stays and an error is logged.
+     */
+    public static boolean remove(String id, boolean decivilize, String why) {
+        Memory mem = GameMemory.global();
+        if (WorldChanges.removed(mem, id)) return true;
+        SectorEntityToken t = Global.getSector().getEntityById(id);
+        if (t == null) {
+            SagaLog.warn(why + ": no entity \"" + id + "\" in this game; nothing to remove");
+            mem.set(WorldChanges.removedKey(id), Boolean.TRUE);
+            return false;
+        }
+        MarketAPI m = t.getMarket();
+        if (m != null && !m.isPlanetConditionMarketOnly()) {
+            if (!decivilize) {
+                SagaLog.error(why + ": " + id + " has the market " + m.getId() + "; it is only removed with \"market\": \"decivilize\". Left in place.");
+                mem.set(WorldChanges.removedKey(id), Boolean.TRUE);
+                return false;
+            }
+            DecivTracker.decivilize(m, true, false);
+        }
+        mem.set(WorldChanges.removedKey(id), Boolean.TRUE);
+        if (t.getContainingLocation() != null) Misc.fadeAndExpire(t);
+        SagaLog.info("removed " + id + " (" + why + ")");
+        return true;
+    }
+
     static void market(SectorEntityToken entity, SystemDef.MarketDef md, SystemDef.Entity e) {
         if (Global.getSector().getEconomy().getMarket(md.id) != null) {
             SagaLog.warn(e.where + ": market " + md.id + " already exists; not created again");
@@ -257,11 +415,88 @@ public final class SystemBuilder {
             }
         }
         m.setFreePort(md.freePort);
+        if (md.protectFromDeciv) m.getMemoryWithoutUpdate().set(com.fs.starfarer.api.impl.campaign.intel.deciv.DecivTracker.NO_DECIV_KEY, true);
         m.setSurveyLevel(MarketAPI.SurveyLevel.FULL);
         entity.setMarket(m);
         entity.setFaction(md.faction);
         Global.getSector().getEconomy().addMarket(m, true);
         for (String person : md.people) People.placeAt(person, m);
         SagaLog.info("market " + md.id + " (" + md.name + ", size " + md.size + ", " + md.faction + ") added to the economy");
+    }
+
+    /** SagaLib 1.2 (RC-F7): an entity's salvage loot (vanilla drop groups) and defenders. */
+    public static void salvage(SectorEntityToken t, java.util.List<SystemDef.Loot> loot, SystemDef.Defenders d) {
+        for (SystemDef.Loot l : loot) {
+            if (l.chances > 0) t.addDropRandom(l.group, l.chances);
+            if (l.value > 0) t.addDropValue(l.group, l.value);
+        }
+        if (d != null) Misc.setDefenderOverride(t, new com.fs.starfarer.api.impl.campaign.procgen.DefenderDataOverride(d.faction, d.prob, d.minStr, d.maxStr, d.maxSize));
+    }
+
+    /**
+     * Clears hyperspace's storm clouds around a new system, exactly as vanilla's SectorGen does for its
+     * own systems (it runs before mods build theirs, so ours were left inside the clouds; reported
+     * 2026-11-16). Vanilla: NebulaEditor on the HyperspaceTerrainPlugin, two clearArc calls.
+     */
+    static String clearedKey(StarSystemAPI sys) { return "$global.sagaforge_hyperclear_" + sys.getId(); }
+
+    static void clearHyperspace(StarSystemAPI sys) {
+        try {
+            com.fs.starfarer.api.campaign.CampaignTerrainAPI terrain = Misc.getHyperspaceTerrain();
+            if (terrain == null || !(terrain.getPlugin() instanceof com.fs.starfarer.api.impl.campaign.terrain.HyperspaceTerrainPlugin)) return;
+            com.fs.starfarer.api.impl.campaign.terrain.HyperspaceTerrainPlugin plugin = (com.fs.starfarer.api.impl.campaign.terrain.HyperspaceTerrainPlugin) terrain.getPlugin();
+            com.fs.starfarer.api.impl.campaign.procgen.NebulaEditor editor = new com.fs.starfarer.api.impl.campaign.procgen.NebulaEditor(plugin);
+            float minRadius = plugin.getTileSize() * 2f;
+            float radius = sys.getMaxRadiusInHyperspace() * 0.5f;
+            float x = sys.getLocation().x, y = sys.getLocation().y;
+            editor.clearArc(x, y, 0, radius + minRadius * 0.5f, 0, 360f);
+            editor.clearArc(x, y, 0, radius + minRadius, 0, 360f, 0.25f);
+            GameMemory.global().set(clearedKey(sys), Boolean.TRUE);
+        } catch (Throwable t) {
+            SagaLog.error("system " + sys.getId() + ": clearing hyperspace around it failed", t);
+        }
+    }
+
+    /**
+     * SagaLib 1.2, new game only (after vanilla's onNewGameAfterEconomyLoad): vanilla's
+     * updateKnownPlanets marks every planet in a system with a colony fully surveyed and its ruins
+     * explored. Planets that say ruinsUnexplored get their ruins back, and their own survey level.
+     */
+    public static void restoreRuins() {
+        for (SystemDef s : Saga.content().systems.values()) {
+            for (SystemDef.Entity e : s.entities) {
+                if (!e.ruinsUnexplored) continue;
+                SectorEntityToken t = Global.getSector().getEntityById(e.id);
+                MarketAPI m = t == null ? null : t.getMarket();
+                if (m == null || !m.isPlanetConditionMarketOnly()) continue;
+                m.getMemoryWithoutUpdate().unset("$ruinsExplored");
+                if ("none".equals(e.surveyed)) m.setSurveyLevel(MarketAPI.SurveyLevel.NONE);
+                else if ("preliminary".equals(e.surveyed)) m.setSurveyLevel(MarketAPI.SurveyLevel.PRELIMINARY);
+                SagaLog.info("ruins of " + e.id + " stay unexplored");
+            }
+        }
+    }
+
+    /**
+     * New game, after vanilla's random systems exist: each of the mods' new systems and its closest
+     * other system. Below 3,000 units (vanilla keeps its own at least 3,065 apart) it is a warning.
+     */
+    public static void reportSpacing() {
+        for (SystemDef s : Saga.content().systems.values()) {
+            if (!s.isNew()) continue;
+            StarSystemAPI sys = find(s);
+            if (sys == null) continue;
+            StarSystemAPI near = null;
+            float best = Float.MAX_VALUE;
+            for (StarSystemAPI o : Global.getSector().getStarSystems()) {
+                if (o == sys) continue;
+                float d = Misc.getDistance(o.getLocation(), sys.getLocation());
+                if (d < best) { best = d; near = o; }
+            }
+            if (near == null) continue;
+            String msg = "system " + s.id + ": closest other system after random generation is " + near.getBaseName() + " at " + Math.round(best) + " units";
+            if (best < 3000f) SagaLog.warn(msg + " (closer than vanilla keeps its own; move it in Saga Forge)");
+            else SagaLog.info(msg);
+        }
     }
 }

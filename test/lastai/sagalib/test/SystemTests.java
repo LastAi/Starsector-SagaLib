@@ -5,6 +5,7 @@ import lastai.sagalib.core.JsonReader;
 import lastai.sagalib.core.MapMemory;
 import lastai.sagalib.core.Problems;
 import lastai.sagalib.core.SystemPlan;
+import lastai.sagalib.core.WorldChanges;
 import lastai.sagalib.model.SystemDef;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -49,6 +50,67 @@ public final class SystemTests {
             @Override
             public boolean exists(String id) { return set.contains(id); }
         };
+    }
+
+    /** SagaLib 1.1: no star, deferred entities, replacements, removals and planet conditions are read; deferred ones aren't built with the system. */
+    public static void worldChangesFormat() throws Exception {
+        SystemDef s = system("{'format':1,'id':'s','kind':'new','hyperspace':[0,0],'star':null,'light':[200,180,255],'entities':["
+                + ent("planet", "planet", "star") + ","
+                + "{'id':'probe','kind':'derelict','type':'wreck','appears':{'quest':'q','stage':'find'},'orbit':{'focus':'planet','radius':300,'angle':0,'days':10}},"
+                + "{'id':'ruin','kind':'station','type':'t','appears':{'quest':'q','stage':'boom'},'replaces':'outpost','orbit':{'focus':'planet','radius':300,'angle':0,'days':10}},"
+                + "{'id':'later','kind':'custom','type':'t','appears':{},'orbit':{'focus':'star','radius':900,'angle':0,'days':10}},"
+                + "{'id':'moon','kind':'moon','type':'barren','conditions':['ruins_scattered','no_atmosphere'],'surveyed':'full','orbit':{'focus':'planet','radius':500,'angle':0,'days':10}}"
+                + "],'removals':[{'target':'outpost','quest':'q','stage':'boom','market':'decivilize'},{'target':'jangala_relay','quest':'q','stage':'boom'}]}");
+        T.eq(null, s.starType, "no star");
+        T.eq(Arrays.asList(200, 180, 255), Arrays.asList(s.light[0], s.light[1], s.light[2]), "light colour");
+        T.yes(s.entity("probe").deferred(), "appears = deferred");
+        T.yes(s.entity("later").deferred() && s.entity("later").appears.quest == null, "appears {} = by SF_PlaceEntity only");
+        T.eq("outpost", s.entity("ruin").replaces, "replaces");
+        T.eq(Arrays.asList("ruins_scattered", "no_atmosphere"), s.entity("moon").conditions, "conditions");
+        T.eq("full", s.entity("moon").surveyed, "surveyed");
+        T.eq(2, s.removals.size(), "removals");
+        T.eq("keep", s.removals.get(1).market, "market defaults to keep");
+        T.eq(Arrays.asList("planet", "moon"), ids(SystemPlan.buildOrder(WorldChanges.initial(s.entities), NOTHING)), "deferred entities aren't built with the system");
+        T.eq(Arrays.asList(), ids(SystemPlan.additions(s, existing("planet", "moon"), new MapMemory())), "nor added to a save");
+    }
+
+    /** SagaLib 1.1: what to place and remove when a quest reaches a stage, once. */
+    public static void worldChangesDecide() throws Exception {
+        SystemDef s = system("{'format':1,'id':'s','kind':'existing','entities':["
+                + "{'id':'probe','kind':'derelict','type':'wreck','appears':{'quest':'q','stage':'find'},'orbit':{'focus':'star','radius':300,'angle':0,'days':10}}"
+                + "],'removals':[{'target':'relay','quest':'q','stage':'boom'}]}");
+        List<SystemDef> all = Arrays.asList(s);
+        MapMemory m = new MapMemory();
+        T.eq(0, WorldChanges.toPlace(all, m).size(), "quest not started");
+        m.set(lastai.sagalib.core.QuestLogic.stateKey("q"), "active");
+        m.set(lastai.sagalib.core.QuestLogic.stepKey("q"), "find");
+        T.eq(1, WorldChanges.toPlace(all, m).size(), "at the stage: place");
+        m.set(WorldChanges.placedKey("probe"), Boolean.TRUE);
+        T.eq(0, WorldChanges.toPlace(all, m).size(), "placed once");
+        T.eq(0, WorldChanges.toRemove(all, m).size(), "removal waits for its stage");
+        m.set(lastai.sagalib.core.QuestLogic.stepKey("q"), "boom");
+        T.eq("relay", WorldChanges.toRemove(all, m).get(0).target, "at its stage: remove");
+        m.set(WorldChanges.removedKey("relay"), Boolean.TRUE);
+        T.eq(0, WorldChanges.toRemove(all, m).size(), "removed once");
+    }
+
+    /** SagaLib 1.1: a quest's entity flags are on only while it is active at one of their steps. */
+    public static void entityFlags() throws Exception {
+        Problems p = new Problems();
+        lastai.sagalib.model.QuestDef q = lastai.sagalib.model.QuestDef.parse(Fx.json("{'format':1,'id':'q','title':'Q','kind':'quest','start':{'kind':'manual'},"
+                + "'stages':[{'id':'find','title':'F','journal':'','kind':'normal','renamedFrom':[]},{'id':'back','title':'B','journal':'','kind':'normal','renamedFrom':[]}],"
+                + "'entityFlags':[{'entity':'probe','flag':'$sagaforge_q_arrive','steps':['find'],'important':true}]}"), new JsonReader("q.json", p));
+        T.yes(p.isEmpty(), "fixture: " + p.all());
+        T.eq(1, q.entityFlags.size(), "read");
+        T.yes(q.entityFlags.get(0).important, "important");
+        MapMemory m = new MapMemory();
+        List<lastai.sagalib.model.QuestDef> qs = Arrays.asList(q);
+        T.no(WorldChanges.entityFlags(qs, m).get(0).on, "quest not started: off");
+        m.set(lastai.sagalib.core.QuestLogic.stateKey("q"), "active");
+        m.set(lastai.sagalib.core.QuestLogic.stepKey("q"), "find");
+        T.yes(WorldChanges.entityFlags(qs, m).get(0).on, "at its step: on");
+        m.set(lastai.sagalib.core.QuestLogic.stepKey("q"), "back");
+        T.no(WorldChanges.entityFlags(qs, m).get(0).on, "another step: off");
     }
 
     public static void focusComesFirst() throws Exception {

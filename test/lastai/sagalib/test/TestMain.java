@@ -26,6 +26,11 @@ public final class TestMain {
                 ProfileTests.class,
                 SystemTests.class,
                 EncounterTests.class,
+                PoolTests.class,
+                TargetTests.class,
+                SevenETests.class,
+                TranslationTests.class,
+                EventTests.class,
                 GoldenTests.class,
                 SandboxTests.class,
         };

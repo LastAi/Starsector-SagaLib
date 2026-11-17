@@ -63,7 +63,7 @@ public final class TriggerDialog extends RuleBasedInteractionDialogPluginImpl {
             boolean ruleOptions = !options.hasOption(FAILSAFE_LEAVE);
             int after = UiLabels.count(dialog.getTextPanel());
             boolean added = before < 0 || after < 0 || after > before; // can't tell: assume text, show Continue
-            Triggers.After what = Triggers.after(ruleOptions, added, false);
+            Triggers.After what = Triggers.after(trigger, ruleOptions, added, false);
             if (what == Triggers.After.DISMISS) {
                 dialog.dismiss();
             } else if (what == Triggers.After.CONTINUE) {

@@ -54,6 +54,8 @@ public final class RuntimeScript implements EveryFrameScript {
             if (sinceTick >= TICK_DAYS) {
                 sinceTick = 0;
                 EncounterManager.tick();
+                // SagaLib 1.1: objects that appear or disappear with quest stages (also set by profiles or jumps)
+                try { lastai.sagalib.systems.SystemBuilder.applyWorldChanges(); } catch (Throwable t) { SagaLog.errorOnce("world-tick", "world changes failed", t); }
                 double now = EncounterManager.now();
                 for (QuestDef q : Saga.content().quests.values()) {
                     if (q.timers.isEmpty()) continue;
@@ -61,6 +63,14 @@ public final class RuntimeScript implements EveryFrameScript {
                         SagaLog.info("quest " + q.id + ": timer fired " + t);
                         Triggers.add(mem, t);
                     }
+                }
+                // SagaLib 1.2: roaming fleets
+                try { lastai.sagalib.encounters.RoamingFleets.tick(mem, now); } catch (Throwable t) { SagaLog.errorOnce("roaming", "roaming fleets failed", t); }
+                // SagaLib 1.2: progress events start when their conditions hold
+                try { ProgressEvents.tick(); } catch (Throwable t) { SagaLog.errorOnce("progress", "progress events failed", t); }
+                // SagaLib 1.2: world event schedulers
+                for (lastai.sagalib.model.EventsDef d : Saga.content().events.values()) {
+                    try { WorldEvents.tick(d, mem, now); } catch (Throwable t) { SagaLog.errorOnce("events:" + d.id, "event scheduler " + d.id + " failed", t); }
                 }
             }
             if (!Global.getSector().getCampaignUI().isShowingDialog() && !Global.getSector().getCampaignUI().isShowingMenu()) {

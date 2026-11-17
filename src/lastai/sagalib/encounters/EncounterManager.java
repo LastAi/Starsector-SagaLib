@@ -112,7 +112,17 @@ public final class EncounterManager {
     /** Resolves the encounter as avoided and sends the fleet away without a fight. */
     static void leave(EncounterDef e, CampaignFleetAPI f) {
         resolve(e, false);
-        if (f == null) return;
+        withdraw(e, f);
+    }
+
+    /**
+     * The fleet stops being the quest's enemy and goes away: not hostile, not chasing the player, not
+     * marked, off to the nearest jump point to despawn. Used when it leaves (avoided) and after a
+     * defeat it survived (found in game, 2026-11-16: a fleet beaten but not destroyed kept chasing
+     * the player after the quest was done).
+     */
+    public static void withdraw(EncounterDef e, CampaignFleetAPI f) {
+        if (f == null || !f.isAlive()) return;
         MemoryAPI m = f.getMemoryWithoutUpdate();
         m.unset(MemFlags.MEMORY_KEY_MAKE_HOSTILE);
         m.unset(MemFlags.MEMORY_KEY_MAKE_AGGRESSIVE);
@@ -127,6 +137,11 @@ public final class EncounterManager {
 
     /** Records the outcome once and queues its trigger. */
     public static void resolve(EncounterDef e, boolean defeated) {
+        // SagaLib 1.1 (a named fleet): count its defeats, and its captain may die with it (only once per spawn)
+        if (defeated && EncounterLogic.isSpawned(mem(), e.id)) {
+            if (e.template != null) EncounterLogic.countDefeat(mem(), e.template);
+            if (e.captainDiesOnDefeat && e.flagshipCommander != null && !e.flagshipCommander.isEmpty()) lastai.sagalib.game.People.retire(e.flagshipCommander, "the fleet of encounter " + e.id + " was defeated");
+        }
         String trigger = EncounterLogic.resolve(mem(), e, Saga.content().quests, defeated, now());
         SagaLog.info("encounter " + e.id + ": " + (defeated ? "defeated" : "avoided") + (trigger != null ? "; firing " + trigger : ""));
         if (trigger != null) Triggers.add(mem(), trigger);
@@ -138,7 +153,7 @@ public final class EncounterManager {
         for (EncounterDef e : Saga.content().encounters.values()) {
             try {
                 if ("ambush".equals(e.behavior)) spring(e);
-                EncounterLogic.Action a = EncounterLogic.decide(e, mem(), now, Saga.content().quests);
+                EncounterLogic.Action a = EncounterLogic.decide(e, mem(), now, Saga.content().quests, "player-near".equals(e.when) && playerNear(e));
                 if (a == EncounterLogic.Action.SPAWN) {
                     if (fleet(e.id) == null && spawnNow(e) == null) {
                         // can't spawn (bad location or faction): don't retry every tick, fire nothing
@@ -157,10 +172,20 @@ public final class EncounterManager {
         }
     }
 
+    /** SagaLib 1.1: the player's fleet is in the spawn place's system, and within range (0 = anywhere there). */
+    static boolean playerNear(EncounterDef e) {
+        CampaignFleetAPI player = Global.getSector().getPlayerFleet();
+        SectorEntityToken at = place(e.at);
+        if (player == null || at == null || player.getContainingLocation() != at.getContainingLocation()) return false;
+        return e.range <= 0 || Misc.getDistance(player.getLocation(), at.getLocation()) <= e.range;
+    }
+
     // ------------------------------------------------------------------ fleets
 
     static SectorEntityToken place(String id) {
         if (id == null || id.isEmpty()) return null;
+        // SagaLib 1.2 (RC-R2): spawn at a quest's random target ($global.<quest>_<var>): the picked place
+        if (id.startsWith("$global.")) return lastai.sagalib.quest.SagaQuest.targetEntity(lastai.sagalib.core.Targets.resolve(lastai.sagalib.game.GameMemory.global(), id));
         SectorEntityToken t = Global.getSector().getEntityById(id);
         if (t != null) return t;
         MarketAPI m = Global.getSector().getEconomy().getMarket(id);
@@ -220,6 +245,40 @@ public final class EncounterManager {
             SagaLog.error("encounter " + e.id + " (" + e.source + "): spawn.at \"" + e.at + "\" is not an entity or market in this game");
             return null;
         }
+        CampaignFleetAPI f = build(e, at.getLocationInHyperspace());
+        if (f == null) return null;
+        at.getContainingLocation().addEntity(f);
+        Vector2f p = spawnPoint(at, near);
+        f.setLocation(p.x, p.y);
+        flags(e, f);
+        // orbits and patrols go around the spawn point (a belt's own location is the star)
+        SectorEntityToken around = p.equals(at.getLocation()) ? at : at.getContainingLocation().createToken(p.x, p.y);
+        if ("ambush".equals(e.behavior) && near != null && near.getContainingLocation() == at.getContainingLocation()) around = near;
+        assign(e, f, around);
+        return f;
+    }
+
+    /**
+     * SagaLib 1.2 (Phase 7e): a random encounter from an encounter pool at one of vanilla's
+     * encounter points, the way vanilla's own EPEncounterCreators spawn theirs: lying in wait near
+     * the point, despawned by vanilla's MissionFleetAutoDespawn once the player is far away. Its
+     * comm dialog (scoped by FLEET_KEY) works as for any encounter; it has no quest outcome.
+     */
+    public static CampaignFleetAPI spawnAtPoint(EncounterDef e, com.fs.starfarer.api.campaign.LocationAPI where, Vector2f loc, Vector2f locInHyper) {
+        CampaignFleetAPI f = build(e, locInHyper);
+        if (f == null) return null;
+        where.addEntity(f);
+        f.setLocation(loc.x, loc.y);
+        flags(e, f);
+        SectorEntityToken around = where.createToken(Misc.getPointWithinRadius(loc, 1000f));
+        f.addAssignment(FleetAssignment.ORBIT_AGGRESSIVE, around, 30f, "laying in wait");
+        f.addScript(new com.fs.starfarer.api.impl.campaign.missions.hub.MissionFleetAutoDespawn(null, f));
+        SagaLog.info("random encounter " + e.id + " spawned at an encounter point in " + where.getName());
+        return f;
+    }
+
+    /** The fleet of an encounter (its ships, captain and name), not yet in the sector. */
+    static CampaignFleetAPI build(EncounterDef e, Vector2f locInHyper) {
         if (Global.getSector().getFaction(e.faction) == null) {
             SagaLog.error("encounter " + e.id + " (" + e.source + "): unknown faction \"" + e.faction + "\"");
             return null;
@@ -227,17 +286,25 @@ public final class EncounterManager {
         CampaignFleetAPI f;
         if (e.explicit()) {
             f = FleetFactoryV3.createEmptyFleet(e.faction, e.fleetType, null);
-            for (String v : e.variants) {
+            for (int i = 0; i < e.variants.size(); i++) {
+                String v = e.variants.get(i);
                 try {
                     if (Global.getSettings().getVariant(v) == null) throw new IllegalArgumentException("unknown variant");
                     FleetMemberAPI m = f.getFleetData().addFleetMember(v);
                     m.getRepairTracker().setCR(m.getRepairTracker().getMaxCR());
+                    // SagaLib 1.1 (a named fleet): its ship names and its flagship
+                    String name = i < e.shipNames.size() ? e.shipNames.get(i) : "";
+                    if (name != null && !name.isEmpty()) m.setShipName(name);
+                    if (i == e.flagship) {
+                        for (FleetMemberAPI o : f.getFleetData().getMembersListCopy()) o.setFlagship(false);
+                        m.setFlagship(true);
+                    }
                 } catch (Throwable t) {
                     SagaLog.error("encounter " + e.id + ": variant \"" + v + "\" skipped (" + t.getMessage() + ")");
                 }
             }
         } else {
-            FleetParamsV3 p = new FleetParamsV3(at.getLocationInHyperspace(), e.faction, e.quality, e.fleetType, e.points, 0f, 0f, 0f, 0f, 0f, 0f);
+            FleetParamsV3 p = new FleetParamsV3(locInHyper, e.faction, e.quality, e.fleetType, e.points, 0f, 0f, 0f, 0f, 0f, 0f);
             p.ignoreMarketFleetSizeMult = true;
             f = FleetFactoryV3.createFleet(p);
         }
@@ -246,7 +313,9 @@ public final class EncounterManager {
             return null;
         }
         f.getFleetData().ensureHasFlagship();
-        if (e.flagshipCommander != null && !e.flagshipCommander.isEmpty()) {
+        if (e.flagshipCommander != null && !e.flagshipCommander.isEmpty() && lastai.sagalib.game.People.isGone(e.flagshipCommander)) {
+            SagaLog.info("encounter " + e.id + ": its captain " + e.flagshipCommander + " is gone; the fleet's own officer commands");
+        } else if (e.flagshipCommander != null && !e.flagshipCommander.isEmpty()) {
             PersonAPI c = Global.getSector().getImportantPeople().getPerson(e.flagshipCommander);
             if (c == null) {
                 SagaLog.warn("encounter " + e.id + ": flagship commander \"" + e.flagshipCommander + "\" doesn't exist; the fleet's own officer commands");
@@ -260,10 +329,11 @@ public final class EncounterManager {
             f.setName(e.fleetName);
             f.setNoFactionInName(true);
         }
-        at.getContainingLocation().addEntity(f);
-        Vector2f p = spawnPoint(at, near);
-        f.setLocation(p.x, p.y);
+        return f;
+    }
 
+    /** The encounter's memory flags on its fleet (who it fights, hostility, disengage, importance). */
+    static void flags(EncounterDef e, CampaignFleetAPI f) {
         MemoryAPI m = f.getMemoryWithoutUpdate();
         m.set(FLEET_KEY, e.id);
         // a quest's fleet isn't fought or chased by patrols and traders, and doesn't chase them (as vanilla's mission fleets)
@@ -279,11 +349,6 @@ public final class EncounterManager {
         else m.set(MemFlags.MEMORY_KEY_MAKE_PREVENT_DISENGAGE, true);
         if (e.important) Misc.makeImportant(f, "sagaforge_" + e.id);
         if ("ambush".equals(e.behavior)) f.setTransponderOn(false);
-        // orbits and patrols go around the spawn point (a belt's own location is the star)
-        SectorEntityToken around = p.equals(at.getLocation()) ? at : at.getContainingLocation().createToken(p.x, p.y);
-        if ("ambush".equals(e.behavior) && near != null && near.getContainingLocation() == at.getContainingLocation()) around = near;
-        assign(e, f, around);
-        return f;
     }
 
     static void assign(EncounterDef e, CampaignFleetAPI f, SectorEntityToken at) {

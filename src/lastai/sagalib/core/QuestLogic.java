@@ -137,12 +137,13 @@ public final class QuestLogic {
         return true;
     }
 
-    /** Applies a reward in Play mode's order: credits, faction rep, person rep, items, ships, XP, story points. */
+    /** Applies a reward in Play mode's order: credits, faction rep, person rep, items, loot (1.2), ships, XP, story points. */
     public static void apply(QuestDef.Reward r, Effects fx) {
         if (r.credits != 0) fx.credits(r.credits);
         for (QuestDef.Amount a : r.rep) fx.factionRep(a.id, a.amount);
         for (QuestDef.Amount a : r.personRep) fx.personRep(a.id, a.amount);
         for (QuestDef.Amount a : r.items) fx.item(a.id, (int) Math.round(a.amount));
+        for (lastai.sagalib.model.SystemDef.Loot l : r.loot) fx.loot(l.group, l.chances, l.value);
         for (String s : r.ships) fx.ship(s);
         if (r.xp != 0) fx.xp(r.xp);
         if (r.storyPoints != 0) fx.storyPoints(r.storyPoints);

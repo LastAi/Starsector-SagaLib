@@ -69,6 +69,9 @@ final class Fx {
         public void item(String item, int qty) { log.add("item " + item + " " + qty); }
 
         @Override
+        public void loot(String group, int chances, int value) { log.add("loot " + group + " " + chances + " " + value); }
+
+        @Override
         public void ship(String variant) { log.add("ship " + variant); }
 
         @Override

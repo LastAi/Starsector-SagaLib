@@ -43,7 +43,7 @@ public final class QuestRuntime {
         if (q.isMission() && SagaQuest.running(id) == null) {
             if (dialog != null && memoryMap != null && id.equals(offeredMissionId(memoryMap))) acceptOffered(id, ruleId, dialog, memoryMap);
             if (SagaQuest.running(id) == null && startDirectly(q, dialog, memoryMap, skipChecks) == null) {
-                SagaLog.info("SF_Start " + id + " (rule " + ruleId + "): not started (its requires don't hold, or it already ran and isn't repeatable)");
+                SagaLog.info("SF_Start " + id + " (rule " + ruleId + "): not started (its requires don't hold, a random target found nothing, or it already ran and isn't repeatable)");
                 return false;
             }
         }
@@ -92,6 +92,8 @@ public final class QuestRuntime {
         String kind = QuestLogic.step(mem, q, id, step);
         SagaQuest m = SagaQuest.running(id);
         if (m == null) return;
+        // SagaLib 1.1: objects that appear or disappear at this stage, at once (not at the next tick)
+        try { lastai.sagalib.systems.SystemBuilder.applyWorldChanges(); } catch (Throwable t) { SagaLog.error("world changes after SF_Step " + id + " " + step, t); }
         if (QuestLogic.SUCCESS.equals(kind) || QuestLogic.FAIL.equals(kind)) m.finish(QuestLogic.SUCCESS.equals(kind), dialog, memoryMap);
         else m.stepChanged(dialog);
     }

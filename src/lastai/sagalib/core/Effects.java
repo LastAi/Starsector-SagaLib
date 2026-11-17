@@ -16,4 +16,6 @@ public interface Effects {
     void xp(long xp);
 
     void storyPoints(int points);
+    /** SagaLib 1.2 (Phase 8a): items rolled from a drop group, as salvage does: chances = random rolls, value = credits' worth. */
+    default void loot(String group, int chances, int value) {}
 }

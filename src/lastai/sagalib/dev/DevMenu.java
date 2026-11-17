@@ -126,7 +126,8 @@ public final class DevMenu implements InteractionDialogPlugin {
             } else if ("profile".equals(o.kind)) {
                 ProfileDef p = Saga.content().profiles.get(o.a);
                 if (p != null) DevTools.applyProfile(p, newGame, text);
-                if (newGame) dialog.dismiss();
+                // a profile that moves the fleet closes the menu, so the map shows the new place (1.2)
+                if (newGame || (p != null && p.startAt != null)) dialog.dismiss();
                 else main();
             } else if ("step".equals(o.kind)) {
                 QuestRuntime.step(o.a, o.b, "SagaLib dev menu", dialog, null, true);

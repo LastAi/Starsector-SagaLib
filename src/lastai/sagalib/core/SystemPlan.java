@@ -76,6 +76,7 @@ public final class SystemPlan {
     public static Order additions(SystemDef s, Exists game, Memory mem) {
         List<SystemDef.Entity> missing = new ArrayList<SystemDef.Entity>();
         for (SystemDef.Entity e : s.entities) {
+            if (e.deferred()) continue; // placed by its quest (SagaLib 1.1, WorldChanges)
             if (game.exists(e.id)) mem.set(addedKey(e.id), Boolean.TRUE);
             else if (!Boolean.TRUE.equals(mem.get(addedKey(e.id)))) missing.add(e);
         }

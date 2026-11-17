@@ -98,7 +98,7 @@ if [ "${1:-}" != "--no-test" ]; then
   echo "== testing (Java)"
   find "$MOD_DIR/test" -name '*.java' > "$BUILD_DIR/test-sources.txt"
   "$JAVAC" --release 8 -Xlint:-options -encoding UTF-8 -cp "$GAME_CP${SEP}$BUILD_DIR/classes" -d "$BUILD_DIR/test-classes" @"$BUILD_DIR/test-sources.txt"
-  "$JAVA" -Dsagalib.modDir="$MOD_DIR" -Dsagalib.classes="$BUILD_DIR/classes" \
+  "$JAVA" -Dsagalib.modDir="$MOD_DIR" -Dsagalib.classes="$BUILD_DIR/classes" -Dsagalib.gameCore="$STARSECTOR_CORE" \
     -cp "$GAME_CP${SEP}$BUILD_DIR/classes${SEP}$BUILD_DIR/test-classes" lastai.sagalib.test.TestMain
 fi
 echo "== done"

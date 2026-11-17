@@ -41,6 +41,11 @@ public final class ContentTests {
 
         @Override
         public boolean devMode() { return dev; }
+
+        final Map<String, JSONArray> csvs = new HashMap<String, JSONArray>();
+
+        @Override
+        public JSONArray loadCsv(String path, String mod) { return csvs.get(mod + "/" + path); }
     }
 
     static FakeSource sample() throws Exception {

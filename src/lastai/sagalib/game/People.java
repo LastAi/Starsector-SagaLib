@@ -23,10 +23,33 @@ import lastai.sagalib.model.PersonDef;
 public final class People {
     private People() {}
 
+    /** SagaLib 1.1: a person written out of the story (dead, gone): never recreated, never a captain again. */
+    public static String goneKey(String personId) { return "$global.sagaforge_gone_" + personId; }
+
+    public static boolean isGone(String personId) { return Boolean.TRUE.equals(GameMemory.global().get(goneKey(personId))); }
+
+    /**
+     * SagaLib 1.1 (SF_RemovePerson, or a fleet's captain who dies with it): the person leaves their
+     * market and comm directory and the important people, for good.
+     */
+    public static void retire(String personId, String why) {
+        GameMemory.global().set(goneKey(personId), Boolean.TRUE);
+        PersonAPI p = Global.getSector().getImportantPeople().getPerson(personId);
+        if (p == null) { SagaLog.info("person " + personId + " is gone (" + why + ")"); return; }
+        MarketAPI m = p.getMarket();
+        if (m != null) {
+            m.getCommDirectory().removePerson(p);
+            m.removePerson(p);
+        }
+        Global.getSector().getImportantPeople().removePerson(p);
+        SagaLog.info("person " + personId + " is gone (" + why + ")");
+    }
+
     /** Creates or updates everyone. Markets that don't exist yet (systems built later) are retried on the next call. */
     public static void applyAll() {
         int made = 0, waiting = 0;
         for (PersonDef d : Saga.content().people.values()) {
+            if (isGone(d.id)) continue; // written out of the story (SagaLib 1.1)
             try {
                 boolean isNew = Global.getSector().getImportantPeople().getPerson(d.id) == null;
                 if (!apply(d)) waiting++;
@@ -90,6 +113,7 @@ public final class People {
      * needed), or an existing important person. Placed there in the comm directory.
      */
     public static void placeAt(String personId, MarketAPI m) {
+        if (isGone(personId)) return; // written out of the story (SagaLib 1.1)
         PersonDef d = Saga.content().people.get(personId);
         PersonAPI p = Global.getSector().getImportantPeople().getPerson(personId);
         if (d != null) {

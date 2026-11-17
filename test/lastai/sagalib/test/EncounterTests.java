@@ -7,6 +7,7 @@ import lastai.sagalib.core.Problems;
 import lastai.sagalib.core.QuestLogic;
 import lastai.sagalib.core.TimerLogic;
 import lastai.sagalib.core.Triggers;
+import lastai.sagalib.core.Values;
 import lastai.sagalib.model.EncounterDef;
 import lastai.sagalib.model.QuestDef;
 import org.json.JSONObject;
@@ -56,6 +57,45 @@ public final class EncounterTests {
         EncounterLogic.spawned(m, e, "vgc_q", "find");
         EncounterLogic.resolve(m, e, Fx.map(), true, 5);
         T.eq(EncounterLogic.Action.NONE, EncounterLogic.decide(e, m, 6), "beaten: no respawn while at the stage");
+    }
+
+    /** SagaLib 1.1: a named fleet's ship names, flagship, template and captain rule are read; defeats are counted. */
+    public static void namedFleet() throws Exception {
+        EncounterDef e = enc("{'format':1,'id':'amb','fleet':{'faction':'pirates','size':'explicit','variants':['wolf_Assault','hound_Standard'],"
+                + "'shipNames':['Thirty Days',''],'flagship':0,'template':'sfw_butters','captainDiesOnDefeat':true,'flagshipCommander':'sfw_butters'},"
+                + "'spawn':{'at':'belt'},'behavior':'ambush'}");
+        T.eq(Arrays.asList("Thirty Days", ""), e.shipNames, "ship names");
+        T.eq(0, e.flagship, "flagship index");
+        T.eq("sfw_butters", e.template, "template");
+        T.yes(e.captainDiesOnDefeat, "captain dies on defeat");
+        MapMemory m = new MapMemory();
+        EncounterLogic.countDefeat(m, "sfw_butters");
+        EncounterLogic.countDefeat(m, "sfw_butters");
+        T.eq(2.0, Values.number(m.get(EncounterLogic.defeatsKey("sfw_butters"))), "two defeats");
+    }
+
+    /** SagaLib 1.1: spawn when the player is near, once; with a quest stage, per visit to it. */
+    public static void playerNearSpawns() throws Exception {
+        EncounterDef e = enc(spawn(",'when':'player-near','range':1500"));
+        T.eq(1500f, e.range, "range read");
+        MapMemory m = new MapMemory();
+        T.eq(EncounterLogic.Action.NONE, EncounterLogic.decide(e, m, 0, Fx.map(), false), "player far: nothing");
+        T.eq(EncounterLogic.Action.SPAWN, EncounterLogic.decide(e, m, 0, Fx.map(), true), "player near: spawn");
+        EncounterLogic.spawned(m, e, null, null);
+        EncounterLogic.resolve(m, e, Fx.map(), true, 1);
+        T.eq(EncounterLogic.Action.NONE, EncounterLogic.decide(e, m, 2, Fx.map(), true), "only once");
+
+        EncounterDef q = enc(spawn(",'when':'player-near','quest':'vgc_q','stage':'find'"));
+        MapMemory m2 = new MapMemory();
+        T.eq(EncounterLogic.Action.NONE, EncounterLogic.decide(q, m2, 0, Fx.map(), true), "near, but the quest isn't at the stage");
+        at(m2, "vgc_q", "find");
+        T.eq(EncounterLogic.Action.SPAWN, EncounterLogic.decide(q, m2, 0, Fx.map(), true), "near and at the stage");
+        EncounterLogic.spawned(m2, q, "vgc_q", "find");
+        EncounterLogic.resolve(m2, q, Fx.map(), false, 1);
+        m2.set(QuestLogic.stepKey("vgc_q"), "other");
+        EncounterLogic.decide(q, m2, 2, Fx.map(), false);
+        m2.set(QuestLogic.stepKey("vgc_q"), "find");
+        T.eq(EncounterLogic.Action.SPAWN, EncounterLogic.decide(q, m2, 3, Fx.map(), true), "a later visit to the stage: again");
     }
 
     public static void spawnedBySFSpawnOnly() throws Exception {
@@ -247,5 +287,28 @@ public final class EncounterTests {
         T.eq("vgc_lost_convoy_ambush_defeated", EncounterLogic.resolve(m, e, quests, true, 2), "defeated trigger from the quest");
         List<String> none = TimerLogic.tick(q, m, 3);
         T.eq(0, none.size(), "no timers in this quest");
+    }
+
+    /** SagaLib 1.2: roaming fleets leave an interval apart, at most max on the way. */
+    public static void roamingDepartures() throws Exception {
+        lastai.sagalib.core.MapMemory m = new lastai.sagalib.core.MapMemory();
+        java.util.Random r = new java.util.Random(5);
+        T.no(lastai.sagalib.core.RoamLogic.due(m, "x", 0, 10f, 0, 2, r), "the first call only plans");
+        int sent = 0, onTheWay = 0;
+        for (int day = 1; day <= 100; day++) if (lastai.sagalib.core.RoamLogic.due(m, "x", day, 10f, onTheWay, 2, r)) { sent++; onTheWay = Math.min(2, onTheWay + 1); }
+        T.eq(2, sent, "never more than max (2) on the way: " + sent);
+        onTheWay = 0;
+        int more = 0;
+        for (int day = 101; day <= 200; day++) if (lastai.sagalib.core.RoamLogic.due(m, "x", day, 10f, onTheWay, 50, r)) more++;
+        T.yes(more >= 7 && more <= 14, "about one every 10 days when there is room: " + more);
+    }
+
+    public static void roamingNeedsADestination() throws Exception {
+        lastai.sagalib.core.Problems p = new lastai.sagalib.core.Problems();
+        lastai.sagalib.model.EncounterDef e = lastai.sagalib.model.EncounterDef.parse(new org.json.JSONObject("{format:1,id:'r',fleet:{faction:'pirates'},spawn:{at:'a',when:'roaming',days:20}}"), new lastai.sagalib.core.JsonReader("t", p));
+        T.yes(e == null && p.has("needs \"to\""), "roaming without to: " + p.all());
+        p = new lastai.sagalib.core.Problems();
+        e = lastai.sagalib.model.EncounterDef.parse(new org.json.JSONObject("{format:1,id:'r',fleet:{faction:'pirates'},spawn:{at:'a',when:'roaming',to:'b',days:20,max:3,stayDays:5,roundTrip:true}}"), new lastai.sagalib.core.JsonReader("t", p));
+        T.yes(e != null && "b".equals(e.to) && e.max == 3 && e.stayDays == 5f && e.roundTrip, "fields read");
     }
 }

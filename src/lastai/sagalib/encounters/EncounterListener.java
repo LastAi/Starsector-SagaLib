@@ -36,7 +36,11 @@ public final class EncounterListener extends BaseCampaignEventListener {
                 if (id == null) continue;
                 EncounterDef e = Saga.content().encounters.get(id);
                 if (e == null || !EncounterLogic.isSpawned(GameMemory.global(), id)) continue;
-                if (playerWon || battle.wasFleetDefeated(f, primaryWinner)) EncounterManager.resolve(e, true);
+                if (playerWon || battle.wasFleetDefeated(f, primaryWinner)) {
+                    EncounterManager.resolve(e, true);
+                    // beaten but not destroyed (it retreated, or a dev-mode win): it breaks off and leaves
+                    if (f.isAlive() && f.getFleetData().getNumMembers() > 0) EncounterManager.withdraw(e, f);
+                }
             }
         } catch (Throwable t) {
             SagaLog.errorOnce("battle-listener", "checking a battle for encounters failed", t);

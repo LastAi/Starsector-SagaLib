@@ -9,7 +9,7 @@ import java.util.List;
 
 /** An encounter file (docs/FORMAT.md, "Encounters"). Definitions only: never saved. */
 public final class EncounterDef {
-    public static final List<String> WHEN = Arrays.asList("quest-stage", "new-game", "periodic");
+    public static final List<String> WHEN = Arrays.asList("quest-stage", "new-game", "periodic", "player-near", "roaming");
     public static final List<String> BEHAVIORS = Arrays.asList("patrol", "guard", "intercept-player", "travel", "ambush");
 
     public String id;
@@ -33,6 +33,16 @@ public final class EncounterDef {
     public boolean despawnOnStageEnd;
     /** periodic: days before respawning. */
     public float days;
+    /** player-near (SagaLib 1.1): how close the player's fleet must come to {@link #at}, in map units; 0 = anywhere in its system. */
+    public float range;
+    /** roaming (SagaLib 1.2): travels from {@link #at} to this place (an entity or market id). */
+    public String to;
+    /** roaming: at most this many on the way at once. */
+    public int max = 1;
+    /** roaming: days it stays at {@link #to} before it leaves (or goes back). */
+    public float stayDays = 3f;
+    /** roaming: travels back to {@link #at} after its stay. */
+    public boolean roundTrip;
 
     public String behavior;
     public String travelTo;
@@ -44,6 +54,14 @@ public final class EncounterDef {
     public String defeated;
     public String avoided;
     public String source;
+
+    /** SagaLib 1.1 (a fleet template, R27): ship names parallel to {@link #variants} ("" = the game's), the flagship's index (-1 = the game picks). */
+    public final List<String> shipNames = new ArrayList<String>();
+    public int flagship = -1;
+    /** SagaLib 1.1: the template it was made from: $global.sagaforge_fleet_&lt;template&gt;_defeats counts its defeats. */
+    public String template;
+    /** SagaLib 1.1: when the fleet is defeated, its captain (flagshipCommander) is gone for good. */
+    public boolean captainDiesOnDefeat;
 
     public boolean explicit() { return "explicit".equals(size); }
 
@@ -75,6 +93,12 @@ public final class EncounterDef {
         e.quality = q == null ? null : q.floatValue();
         e.flagshipCommander = r.str(f, "flagshipCommander", "$.fleet", false, "");
         e.fleetName = r.str(f, "name", "$.fleet", false, "");
+        e.shipNames.addAll(r.strings(f, "shipNames", "$.fleet"));
+        Double fs = r.num(f, "flagship", "$.fleet", -1d);
+        e.flagship = fs == null ? -1 : (int) Math.round(fs);
+        e.template = emptyToNull(r.str(f, "template", "$.fleet", false, ""));
+        Boolean cd = r.bool(f, "captainDiesOnDefeat", "$.fleet", false);
+        e.captainDiesOnDefeat = cd != null && cd;
 
         JSONObject s = r.obj(o, "spawn", "$", true);
         if (s == null) return null;
@@ -96,6 +120,20 @@ public final class EncounterDef {
         e.despawnOnStageEnd = d != null && d;
         Double days = r.num(s, "days", "$.spawn", 0d);
         e.days = days == null ? 0 : days.floatValue();
+        Double range = r.num(s, "range", "$.spawn", 0d);
+        e.range = range == null ? 0 : Math.max(0, range.floatValue());
+        // SagaLib 1.2: roaming fleets (a route from at to "to", every "days" on average, at most "max")
+        e.to = emptyToNull(r.str(s, "to", "$.spawn", false, ""));
+        Double mx = r.num(s, "max", "$.spawn", 1d);
+        e.max = mx == null ? 1 : Math.max(0, mx.intValue());
+        Double st = r.num(s, "stayDays", "$.spawn", 3d);
+        e.stayDays = st == null ? 3f : Math.max(0, st.floatValue());
+        Boolean rt = r.bool(s, "roundTrip", "$.spawn", false);
+        e.roundTrip = rt != null && rt;
+        if ("roaming".equals(e.when)) {
+            if (e.to == null) { r.error("$.spawn.to", "a roaming fleet needs \"to\": where it travels"); return null; }
+            if (e.days <= 0) { r.warn("$.spawn.days", "a roaming fleet needs \"days\" (on average between departures); 30 is used"); e.days = 30f; }
+        }
 
         e.behavior = r.str(o, "behavior", "$", false, "patrol");
         if (!BEHAVIORS.contains(e.behavior)) {

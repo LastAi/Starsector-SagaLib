@@ -73,7 +73,7 @@ public final class PhraseTokens implements RuleTokenReplacementGeneratorPlugin {
                         SagaLog.errorOnce("phrase-tokens:" + tok, "filling the tokens inside phrase " + tok + " failed", t);
                     }
                 }
-                out.put(tok, text);
+                out.put(tok, java.util.regex.Matcher.quoteReplacement(text)); // the game uses it as a regex replacement (docs/FORMATS.md)
             }
             return out;
         } finally {
@@ -90,7 +90,7 @@ public final class PhraseTokens implements RuleTokenReplacementGeneratorPlugin {
         return out;
     }
 
-    private static SectorEntityToken target(Object entity) {
+    static SectorEntityToken target(Object entity) {
         if (entity instanceof SectorEntityToken) return (SectorEntityToken) entity;
         if (entity instanceof PersonAPI) {
             PersonAPI p = (PersonAPI) entity;

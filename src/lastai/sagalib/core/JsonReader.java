@@ -120,7 +120,7 @@ public final class JsonReader {
         public final JSONObject json;
         public final String path;
 
-        Indexed(JSONObject json, String path) {
+        public Indexed(JSONObject json, String path) {
             this.json = json;
             this.path = path;
         }
