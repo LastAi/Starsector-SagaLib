@@ -1,6 +1,11 @@
 # Changelog
 
-## 1.2.0 (unreleased, 2026-11-16)
+## 1.2.0 (2026-11-17)
+
+For Starsector **0.98a and 0.98.5a** (one jar; the release has a zip for each, differing only in
+`mod_info.json` `gameVersion`). Includes 1.1.0, which wasn't released on its own. Every part was
+tested in game on 0.98.5a with throwaway test mods (Saga Forge `docs/INGAME-CHECKS.md`, Phases 7–8).
+
 
 Format 1, with a new content type and command (docs/FORMAT.md, "Pools"). Content without them
 behaves exactly as with 1.1.
@@ -58,9 +63,8 @@ behaves exactly as with 1.1.
   the player to their testing area.
 
 Tested: 94 Java tests and the golden cases (including `pools.json`, shared with Saga Forge).
-**Not yet tested in game.**
 
-## 1.1.0 (unreleased, 2026-11-15)
+## 1.1.0 (2026-11-15, released as part of 1.2.0)
 
 Format 1, with optional new fields (docs/FORMAT.md, "SagaLib 1.1 additions"). Content without
 them behaves exactly as with 1.0; saves keep working (new memory keys only).
