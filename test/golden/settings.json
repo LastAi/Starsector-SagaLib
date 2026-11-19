@@ -1,0 +1,77 @@
+{
+  "name": "SagaLib 1.3 (task #62): mod settings from the mod's LunaSettings.csv into $global.<id> (defaults, then the player's values), conditions on them, and settings scaling credit rewards and encounter fleet size",
+  "quests": [
+    {
+      "format": 1, "id": "sst_job", "title": "The job", "kind": "quest", "icon": "", "repeatable": false, "timeLimitDays": 0,
+      "start": { "kind": "manual" },
+      "requires": ["$global.sst_enable"],
+      "stages": [ { "id": "go", "title": "Go", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] } ],
+      "variables": [],
+      "rewards": [
+        { "id": "bonus", "credits": 1000, "creditsScale": { "setting": "sst_bonus", "per": 100 } },
+        { "id": "hard", "credits": 1000, "creditsScale": { "setting": "sst_difficulty", "factors": { "Easy": 0.5, "Normal": 1, "Hard": 2 } } },
+        { "id": "times", "credits": 999, "creditsScale": { "setting": "sst_mult" } },
+        { "id": "byBool", "credits": 100, "creditsScale": { "setting": "sst_enable", "factors": { "true": 3 } } },
+        { "id": "unknown", "credits": 500, "creditsScale": { "setting": "sst_nothing", "per": 100 } },
+        { "id": "plain", "credits": 700 }
+      ],
+      "timers": [], "encounters": [], "arrivals": [], "phrases": [], "flags": []
+    }
+  ],
+  "phrases": [],
+  "settings": {
+    "mod": "sst_mod",
+    "rows": [
+      { "fieldID": "sst_header", "fieldName": "Story", "fieldType": "Header", "defaultValue": "", "secondaryValue": "", "fieldDescription": "", "minValue": "", "maxValue": "", "tab": "" },
+      { "fieldID": "sst_enable", "fieldName": "Enable the side job", "fieldType": "Boolean", "defaultValue": "true", "secondaryValue": "", "fieldDescription": "", "minValue": "", "maxValue": "", "tab": "" },
+      { "fieldID": "sst_difficulty", "fieldName": "Difficulty", "fieldType": "Radio", "defaultValue": "Normal", "secondaryValue": "Easy,Normal,Hard", "fieldDescription": "", "minValue": "", "maxValue": "", "tab": "" },
+      { "fieldID": "sst_bonus", "fieldName": "Reward (percent)", "fieldType": "Int", "defaultValue": "100", "secondaryValue": "", "fieldDescription": "", "minValue": "50", "maxValue": "300", "tab": "" },
+      { "fieldID": "sst_mult", "fieldName": "Multiplier", "fieldType": "Double", "defaultValue": "1.5", "secondaryValue": "", "fieldDescription": "", "minValue": "0", "maxValue": "4", "tab": "Numbers" },
+      { "fieldID": "sst_name", "fieldName": "Ship name", "fieldType": "String", "defaultValue": "Wanderer", "secondaryValue": "", "fieldDescription": "", "minValue": "", "maxValue": "", "tab": "" },
+      { "fieldID": "sst_note", "fieldName": "These settings are shared by every save.", "fieldType": "Text", "defaultValue": "", "secondaryValue": "", "fieldDescription": "", "minValue": "", "maxValue": "", "tab": "" },
+      { "fieldID": "", "fieldName": "a row without an id is skipped, as LunaLib does", "fieldType": "Boolean", "defaultValue": "true", "secondaryValue": "", "fieldDescription": "", "minValue": "", "maxValue": "", "tab": "" }
+    ]
+  },
+  "encounters": [
+    { "format": 1, "id": "sst_raiders", "name": "Raiders",
+      "fleet": { "faction": "pirates", "type": "patrolSmall", "size": "fp", "points": 40, "sizeScale": { "setting": "sst_difficulty", "factors": { "Easy": 0.5, "Normal": 1, "Hard": 2 } } },
+      "spawn": { "at": "sst_rock", "when": "quest-stage" }, "behavior": "patrol", "flags": {}, "outcomes": {} },
+    { "format": 1, "id": "sst_tiny", "name": "Tiny",
+      "fleet": { "faction": "pirates", "type": "patrolSmall", "size": "fp", "points": 3, "sizeScale": { "setting": "sst_bonus", "per": 1000 } },
+      "spawn": { "at": "sst_rock", "when": "quest-stage" }, "behavior": "patrol", "flags": {}, "outcomes": {} }
+  ],
+  "steps": [
+    { "fleetPoints": "sst_raiders", "is": 40, "note": "no setting in memory yet: factor 1" },
+    { "credits": ["sst_job", "bonus"], "is": 1000 },
+
+    { "settings": {}, "note": "a game load without LunaLib: every value field gets its default; Header and Text have no value" },
+    { "expect": { "$global.sst_enable": "true", "$global.sst_difficulty": "Normal", "$global.sst_bonus": "100", "$global.sst_mult": "1.5", "$global.sst_name": "Wanderer" } },
+    { "unset": ["$global.sst_header", "$global.sst_note", "$global."] },
+    { "check": "$global.sst_enable", "is": true },
+    { "check": "$global.sst_bonus >= 100", "is": true },
+    { "check": "$global.sst_difficulty == Normal", "is": true },
+    { "credits": ["sst_job", "bonus"], "is": 1000 },
+    { "credits": ["sst_job", "hard"], "is": 1000 },
+    { "credits": ["sst_job", "times"], "is": 1499, "note": "999 x 1.5 = 1498.5, rounded half up" },
+    { "credits": ["sst_job", "byBool"], "is": 300 },
+    { "credits": ["sst_job", "unknown"], "is": 500, "note": "a setting that isn't in memory counts as 1" },
+    { "credits": ["sst_job", "plain"], "is": 700 },
+    { "fleetPoints": "sst_raiders", "is": 40 },
+    { "fleetPoints": "sst_tiny", "is": 1, "note": "3 x 0.1 = 0.3: a fleet sized by points keeps at least 1 point" },
+
+    { "settings": { "sst_enable": "false", "sst_difficulty": "Hard", "sst_bonus": "150", "sst_mult": "2" }, "note": "LunaLib with the player's values (as the bridge reads them); the others keep their defaults" },
+    { "expect": { "$global.sst_enable": "false", "$global.sst_difficulty": "Hard", "$global.sst_bonus": "150", "$global.sst_mult": "2", "$global.sst_name": "Wanderer" } },
+    { "check": "$global.sst_enable", "is": false },
+    { "check": "$global.sst_difficulty == Hard", "is": true },
+    { "credits": ["sst_job", "bonus"], "is": 1500 },
+    { "credits": ["sst_job", "hard"], "is": 2000 },
+    { "credits": ["sst_job", "times"], "is": 1998 },
+    { "credits": ["sst_job", "byBool"], "is": 100, "note": "false isn't in the factors: 1" },
+    { "fleetPoints": "sst_raiders", "is": 80 },
+
+    { "settings": { "sst_difficulty": "Easy", "sst_bonus": "lots", "sst_enable": "true" }, "note": "a menu change applied at once; a value that doesn't read as its type falls back to the default" },
+    { "expect": { "$global.sst_difficulty": "Easy", "$global.sst_bonus": "100", "$global.sst_enable": "true", "$global.sst_mult": "1.5" } },
+    { "fleetPoints": "sst_raiders", "is": 20 },
+    { "credits": ["sst_job", "hard"], "is": 500 }
+  ]
+}

@@ -60,6 +60,20 @@ public class SagaQuest extends HubMissionWithBarEvent {
         String state = QuestLogic.state(mem, id);
         if (!skipChecks) {
             if (QuestLogic.ACTIVE.equals(state)) return false;
+            // SagaLib 1.3: a quest only with / only without mods is never offered
+            if (!lastai.sagalib.core.Mods.allowed(mem, q.gate, "quest", id)) return false;
+            // SagaLib 1.3 (task #61): never offered or started while a place or person it needs is missing (a random sector, a removed mod)
+            String miss = lastai.sagalib.core.Places.missing(q, lastai.sagalib.core.Places.world(), laterEntities());
+            if (miss != null) {
+                lastai.sagalib.core.Mods.skip("quest", id, "needs " + miss + ", which doesn't exist in this game", null);
+                return false;
+            }
+            // SagaLib 1.3 (task #70): not offered while its contact is away (their market's owner doesn't get on with their faction)
+            String away = lastai.sagalib.core.Presence.awayPerson(mem, q);
+            if (away != null) {
+                lastai.sagalib.core.Mods.skip("quest", id, "its contact " + away + " is away", null);
+                return false;
+            }
             if (!q.repeatable && !QuestLogic.NOT_STARTED.equals(state)) return false;
             Map<String, MemoryAPI> map = GameMemory.defaultMap();
             if (createdAt != null) map.put(MemKeys.MARKET, createdAt.getMemoryWithoutUpdate());
@@ -106,9 +120,19 @@ public class SagaQuest extends HubMissionWithBarEvent {
         return true;
     }
 
+    /** SagaLib 1.1: the mod's objects that appear during a quest (not there when it is offered). */
+    private static java.util.Set<String> laterEntities() {
+        java.util.Set<String> out = new java.util.HashSet<String>();
+        for (lastai.sagalib.model.SystemDef s : Saga.content().systems.values()) for (lastai.sagalib.model.SystemDef.Entity e : s.entities) if (e.deferred()) out.add(e.id);
+        return out;
+    }
+
     @Override
     public void acceptImpl(InteractionDialogAPI dialog, Map<String, MemoryAPI> memoryMap) {
         QuestLogic.start(GameMemory.global(), def(), getMissionId());
+        // SagaLib 1.3 (task #61): the owners of its markets, with the giver's market
+        PersonAPI giver = getPerson();
+        lastai.sagalib.core.Places.remember(GameMemory.global(), def(), giver != null && giver.getMarket() != null ? giver.getMarket().getId() : null);
         updateMarker();
     }
 
@@ -165,7 +189,9 @@ public class SagaQuest extends HubMissionWithBarEvent {
     @Override
     public String getIcon() {
         QuestDef q = def();
-        if (q != null && q.icon != null && !q.icon.isEmpty()) return q.icon;
+        // SagaLib 1.3: the game only draws loaded textures, and nothing loads a mod's own quest icon
+        // (only one named in person_missions.csv / bar_events.csv might be); a missing file falls back
+        if (q != null && q.icon != null && !q.icon.isEmpty() && lastai.sagalib.game.Textures.ensure(q.icon)) return q.icon;
         PersonAPI p = getPerson();
         if (p != null) return p.getPortraitSprite();
         return Global.getSettings().getSpriteName("intel", "important_accepted_mission");

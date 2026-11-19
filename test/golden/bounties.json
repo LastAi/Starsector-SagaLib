@@ -1,0 +1,95 @@
+{
+  "name": "SagaLib 1.3 MagicLib bounties (task #59): SF_BountyState read from MagicLib's memory keys, SF_StartBounty, and the true/false quest-ended keys MagicLib's triggers can test",
+  "quests": [
+    {
+      "format": 1, "id": "g_job", "title": "Job", "kind": "quest", "icon": "", "repeatable": false, "timeLimitDays": 0,
+      "start": { "kind": "manual" }, "requires": [],
+      "stages": [
+        { "id": "go", "title": "go", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] },
+        { "id": "won", "title": "won", "journal": "", "nextStep": "", "marker": "", "kind": "success", "renamedFrom": [] }
+      ],
+      "variables": [], "targets": [], "rewards": [], "timers": [], "encounters": [], "arrivals": [], "phrases": [], "flags": []
+    },
+    {
+      "format": 1, "id": "g_old", "title": "Old", "kind": "quest", "icon": "", "repeatable": false, "timeLimitDays": 0,
+      "start": { "kind": "manual" }, "requires": [],
+      "stages": [{ "id": "go", "title": "go", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] }],
+      "variables": [], "targets": [], "rewards": [], "timers": [], "encounters": [], "arrivals": [], "phrases": [], "flags": []
+    }
+  ],
+  "phrases": [],
+  "bounties": {
+    "known": ["g_b_raid", "g_b_hvb"],
+    "memKeys": { "g_b_hvb": "$HVB_g_hvb" }
+  },
+  "enabled": [],
+  "steps": [
+    { "check": "SF_BountyState g_b_raid unavailable", "is": true },
+    { "check": "SF_BountyState g_b_raid offered", "is": false },
+    { "do": "SF_StartBounty g_b_raid" },
+    { "check": "$global.g_b_raid", "is": false },
+    { "check": "SF_BountyState g_b_raid active", "is": false },
+
+    { "enabled": ["MagicLib"] },
+    { "check": "SF_BountyState g_b_raid offered", "is": true },
+    { "check": "SF_BountyState g_b_raid unavailable", "is": false },
+    { "check": "SF_BountyState g_b_other unavailable", "is": true },
+    { "do": "SF_StartBounty g_b_raid" },
+    { "expect": { "$global.g_b_raid": "false" } },
+    { "check": "SF_BountyState g_b_raid active", "is": true },
+    { "check": "SF_BountyState g_b_raid offered active", "is": true },
+    { "check": "SF_BountyState g_b_raid ended", "is": false },
+    { "check": "!SF_BountyState g_b_raid offered", "is": true },
+    { "do": "SF_StartBounty g_b_raid" },
+    { "expect": { "$global.g_b_raid": "false" } },
+
+    { "do": "$global.g_b_raid = true\n$global.g_b_raid_succeeded = true" },
+    { "check": "SF_BountyState g_b_raid succeeded", "is": true },
+    { "check": "SF_BountyState g_b_raid ended", "is": true },
+    { "check": "SF_BountyState g_b_raid active", "is": false },
+    { "do": "SF_StartBounty g_b_raid" },
+    { "expect": { "$global.g_b_raid": "true" } },
+
+    { "do": "$global.g_b_hunt = true\n$global.g_b_hunt_failed = true" },
+    { "check": "SF_BountyState g_b_hunt failed", "is": true },
+    { "do": "$global.g_b_wake = true\n$global.g_b_wake_expired = true" },
+    { "check": "SF_BountyState g_b_wake expired", "is": true },
+    { "check": "SF_BountyState g_b_wake failed succeeded", "is": false },
+    { "do": "$global.g_b_gone = true" },
+    { "check": "SF_BountyState g_b_gone dismissed", "is": true },
+    { "check": "SF_BountyState g_b_gone ended", "is": true },
+
+    { "check": "SF_BountyState g_b_hvb offered", "is": true },
+    { "do": "SF_StartBounty g_b_hvb" },
+    { "expect": { "$global.HVB_g_hvb": "false" } },
+    { "check": "SF_BountyState g_b_hvb active", "is": true },
+
+    { "do": "SF_Step g_job go" },
+    { "check": "$global.sagaforge_success_g_job", "is": false },
+    { "do": "SF_Step g_job won" },
+    { "expect": { "$global.g_job_state": "success", "$global.sagaforge_success_g_job": "true" } },
+    { "check": "$global.sagaforge_fail_g_job", "is": false },
+    { "do": "SF_End g_old fail" },
+    { "expect": { "$global.sagaforge_fail_g_old": "true" } },
+    { "do": "unset $global.sagaforge_fail_g_old" },
+    { "reload": [
+      {
+        "format": 1, "id": "g_job", "title": "Job", "kind": "quest", "icon": "", "repeatable": false, "timeLimitDays": 0,
+        "start": { "kind": "manual" }, "requires": [],
+        "stages": [
+          { "id": "go", "title": "go", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] },
+          { "id": "won", "title": "won", "journal": "", "nextStep": "", "marker": "", "kind": "success", "renamedFrom": [] }
+        ],
+        "variables": [], "targets": [], "rewards": [], "timers": [], "encounters": [], "arrivals": [], "phrases": [], "flags": []
+      },
+      {
+        "format": 1, "id": "g_old", "title": "Old", "kind": "quest", "icon": "", "repeatable": false, "timeLimitDays": 0,
+        "start": { "kind": "manual" }, "requires": [],
+        "stages": [{ "id": "go", "title": "go", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] }],
+        "variables": [], "targets": [], "rewards": [], "timers": [], "encounters": [], "arrivals": [], "phrases": [], "flags": []
+      }
+    ] },
+    { "expect": { "$global.sagaforge_fail_g_old": "true" } },
+    { "check": "$global.sagaforge_success_g_old", "is": false }
+  ]
+}

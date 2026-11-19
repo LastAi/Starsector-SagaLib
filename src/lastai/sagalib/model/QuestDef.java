@@ -17,6 +17,19 @@ public final class QuestDef {
         public String minRep;
         public String offerText;
         public String optionText;
+        /** SagaLib 1.3 (task #61): the start rule's conditions (option, trigger, interject, bar scene starts); "$id == x" names a place it needs. */
+        public final List<String> conditions = new ArrayList<String>();
+    }
+
+    /** SagaLib 1.3 (task #61): what happens when one of the quest's markets changes owner (core.Places). */
+    public static final class OwnerChange {
+        /** keep, fail or stage. */
+        public String action;
+        public String stage;
+        /** Fired after "stage" (the rule runs what follows that Stage node); null = none. */
+        public String trigger;
+        /** Market or entity ids, or a random target's key ("$global.<quest>_<var>"). */
+        public final List<String> markets = new ArrayList<String>();
     }
 
     public static final class Stage {
@@ -60,6 +73,8 @@ public final class QuestDef {
         public final List<String> ships = new ArrayList<String>();
         public long xp;
         public int storyPoints;
+        /** SagaLib 1.3 (task #62): scales {@link #credits} by a mod setting (null = never scaled). */
+        public lastai.sagalib.core.Settings.Scale creditsScale;
     }
 
     public static final class Timer {
@@ -68,6 +83,30 @@ public final class QuestDef {
         public double days;
         /** The step the quest waits at (optional; null = the step it is at when the timer starts). */
         public String stage;
+    }
+
+    /**
+     * SagaLib 1.3: a Wait node that waits for a MagicLib bounty to end (core.BountyWaits). Each
+     * outcome's trigger is fired once the bounty ended that way; an empty one fires nothing.
+     */
+    public static final class BountyWait {
+        public String node;
+        public String bounty;
+        /** The step the quest waits at (null = any step of the run, once). */
+        public String stage;
+        public String succeeded = "";
+        public String failed = "";
+        public String expired = "";
+        public String dismissed = "";
+
+        /** The trigger for a bounty state: "" for an end without one, null when the state isn't an end. */
+        public String trigger(String state) {
+            if (lastai.sagalib.core.Bounties.SUCCEEDED.equals(state)) return succeeded;
+            if (lastai.sagalib.core.Bounties.FAILED.equals(state)) return failed;
+            if (lastai.sagalib.core.Bounties.EXPIRED.equals(state)) return expired;
+            if (lastai.sagalib.core.Bounties.DISMISSED.equals(state)) return dismissed;
+            return null;
+        }
     }
 
     public static final class EncounterUse {
@@ -91,6 +130,8 @@ public final class QuestDef {
     public final List<Reward> rewards = new ArrayList<Reward>();
     public final List<Timer> timers = new ArrayList<Timer>();
     public final List<EncounterUse> encounters = new ArrayList<EncounterUse>();
+    /** SagaLib 1.3: Wait nodes on a MagicLib bounty's end. */
+    public final List<BountyWait> bountyWaits = new ArrayList<BountyWait>();
     public final List<String> arrivals = new ArrayList<String>();
     /** SagaLib 1.1: flags on entities while the quest is at some of its steps. */
     public final List<EntityFlag> entityFlags = new ArrayList<EntityFlag>();
@@ -125,6 +166,22 @@ public final class QuestDef {
     }
     /** Where it was read ("data/sagaforge/quests/x.json (mod vgc)"). */
     public String source;
+    /** SagaLib 1.3: only with / only without these mods (modsWith, modsWithout, modsAny). */
+    public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
+    /** SagaLib 1.3 (task #61): watched markets and the outcome, or null (not watched). */
+    public OwnerChange ownerChange;
+    /**
+     * SagaLib 1.3 (task #65): what skipping this quest on Nexerelin's new-game "skip quests" screen
+     * gives besides the memory flags Nexerelin sets from questSkip.json: the chosen ending's rewards and
+     * people to show in their comm directory; null = nothing (core.QuestSkip).
+     */
+    public Skip skip;
+
+    /** SagaLib 1.3 (task #65): see {@link #skip}. */
+    public static final class Skip {
+        public final List<Reward> rewards = new ArrayList<Reward>();
+        public final List<String> unhide = new ArrayList<String>();
+    }
 
     /** SagaLib 1.1: an entity flag set while the quest is active at one of {@link #steps} (vanilla's setFlag(entity, flag, …, stages)). */
     public static final class EntityFlag {
@@ -155,6 +212,7 @@ public final class QuestDef {
         if (!r.checkFormat(o)) return null;
         QuestDef q = new QuestDef();
         q.source = r.file;
+        q.gate = lastai.sagalib.core.ModGate.parse(o, "$", r);
         q.id = r.str(o, "id", path, true, null);
         if (q.id == null) return null;
         if (q.id.isEmpty() || q.id.contains(" ")) {
@@ -183,6 +241,7 @@ public final class QuestDef {
             q.start.minRep = r.str(s, "minRep", sp, false, "");
             q.start.offerText = r.str(s, "offerText", sp, false, "");
             q.start.optionText = r.str(s, "optionText", sp, false, "");
+            q.start.conditions.addAll(r.strings(s, "conditions", sp));
         } else {
             q.start.kind = "manual";
             q.start.person = "";
@@ -245,6 +304,21 @@ public final class QuestDef {
             u.avoided = r.str(e.json, "avoided", e.path, false, "");
             q.encounters.add(u);
         }
+        for (JsonReader.Indexed e : r.objects(o, "bountyWaits", path)) {
+            BountyWait w = new BountyWait();
+            w.node = r.str(e.json, "node", e.path, false, "");
+            w.bounty = r.str(e.json, "bounty", e.path, true, null);
+            if (w.bounty == null || w.bounty.trim().isEmpty()) continue;
+            w.bounty = w.bounty.trim();
+            w.stage = r.str(e.json, "stage", e.path, false, "");
+            if (w.stage.isEmpty()) w.stage = null;
+            if (w.node.isEmpty()) w.node = w.bounty;
+            w.succeeded = r.str(e.json, "succeeded", e.path, false, "");
+            w.failed = r.str(e.json, "failed", e.path, false, "");
+            w.expired = r.str(e.json, "expired", e.path, false, "");
+            w.dismissed = r.str(e.json, "dismissed", e.path, false, "");
+            q.bountyWaits.add(w);
+        }
         q.arrivals.addAll(r.strings(o, "arrivals", path));
         for (JsonReader.Indexed x : r.objects(o, "entityFlags", path)) {
             EntityFlag f = new EntityFlag();
@@ -267,6 +341,34 @@ public final class QuestDef {
             if (p != null) q.phrases.add(p);
         }
         q.flags.addAll(r.strings(o, "flags", path));
+        // SagaLib 1.3 (task #61): markets changing owner
+        JSONObject oc = r.obj(o, "ownerChange", path, false);
+        if (oc != null) {
+            String op = "$.ownerChange";
+            OwnerChange c = new OwnerChange();
+            c.action = r.str(oc, "do", op, false, "keep");
+            if (!"keep".equals(c.action) && !"fail".equals(c.action) && !"stage".equals(c.action)) {
+                r.error(JsonReader.at(op, "do"), "unknown \"" + c.action + "\" (keep, fail or stage); keeps going");
+                c.action = "keep";
+            }
+            c.stage = r.str(oc, "stage", op, false, "");
+            if ("stage".equals(c.action) && q.stage(c.stage) == null) r.error(JsonReader.at(op, "stage"), "no stage \"" + c.stage + "\" in this quest");
+            String t = r.str(oc, "trigger", op, false, "");
+            c.trigger = t.isEmpty() ? null : t;
+            c.markets.addAll(r.strings(oc, "markets", op));
+            q.ownerChange = c;
+        }
+        // SagaLib 1.3 (task #65): a Nexerelin quest skip's rewards and people to show
+        JSONObject sk = r.obj(o, "skip", path, false);
+        if (sk != null) {
+            Skip k = new Skip();
+            for (JsonReader.Indexed e : r.objects(sk, "rewards", "$.skip")) {
+                Reward rw = parseReward(e.json, e.path, r);
+                if (rw != null) k.rewards.add(rw);
+            }
+            k.unhide.addAll(r.strings(sk, "unhide", "$.skip"));
+            q.skip = k;
+        }
         return q;
     }
 
@@ -324,6 +426,7 @@ public final class QuestDef {
         SystemDef.parseLoot(r, o, path, rw.loot);
         Double credits = r.num(o, "credits", path, 0d);
         rw.credits = credits == null ? 0 : Math.round(credits);
+        rw.creditsScale = lastai.sagalib.core.Settings.Scale.parse(o, "creditsScale", path, r);
         for (JsonReader.Indexed e : r.objects(o, "rep", path)) {
             String f = r.str(e.json, "faction", e.path, true, null);
             Double a = r.num(e.json, "amount", e.path, null);

@@ -94,6 +94,12 @@ public class SagaProgressEvent extends BaseEventIntel {
         }
     }
 
+    /** SagaLib 1.3: the definition changed after the save was read (versions by installed mods, a dev reload): use the current one. */
+    void refreshDef() {
+        def = null;
+        if (def() != null) setup();
+    }
+
     protected Object readResolve() {
         def = null;
         if (def() != null && stages.size() != def().stages.size() + 1) setup();

@@ -31,11 +31,14 @@ public final class ScatterDef {
     /** Where "within N light-years" criteria measure from: an entity or market id; null = the player. */
     public String from;
     public String source;
+    /** SagaLib 1.3: only with / only without these mods (modsWith, modsWithout, modsAny). */
+    public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
 
     public static ScatterDef parse(JSONObject o, JsonReader r) {
         if (!r.checkFormat(o)) return null;
         ScatterDef s = new ScatterDef();
         s.source = r.file;
+        s.gate = lastai.sagalib.core.ModGate.parse(o, "$", r);
         s.id = r.str(o, "id", "$", true, null);
         if (s.id == null) return null;
         Double c = r.num(o, "count", "$", 1.0);

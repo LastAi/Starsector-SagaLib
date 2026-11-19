@@ -76,6 +76,7 @@ public final class EncounterManager {
             SagaLog.error("SF_Spawn in rule " + ruleId + ": unknown encounter \"" + encounterId + "\"");
             return;
         }
+        if (!lastai.sagalib.core.Mods.allowed(mem(), e.gate, "encounter", e.id)) return; // SagaLib 1.3
         if (fleet(e.id) != null) {
             SagaLog.info("SF_Spawn " + e.id + " (rule " + ruleId + "): already spawned");
             return;
@@ -152,6 +153,7 @@ public final class EncounterManager {
         double now = now();
         for (EncounterDef e : Saga.content().encounters.values()) {
             try {
+                if (!lastai.sagalib.core.Mods.allowed(mem(), e.gate, "encounter", e.id)) continue; // SagaLib 1.3
                 if ("ambush".equals(e.behavior)) spring(e);
                 EncounterLogic.Action a = EncounterLogic.decide(e, mem(), now, Saga.content().quests, "player-near".equals(e.when) && playerNear(e));
                 if (a == EncounterLogic.Action.SPAWN) {
@@ -304,7 +306,10 @@ public final class EncounterManager {
                 }
             }
         } else {
-            FleetParamsV3 p = new FleetParamsV3(locInHyper, e.faction, e.quality, e.fleetType, e.points, 0f, 0f, 0f, 0f, 0f, 0f);
+            // SagaLib 1.3 (task #62): the points may be scaled by a mod setting ($global.<setting>)
+            float points = e.scaledPoints(lastai.sagalib.game.GameMemory.global());
+            if (points != e.points) SagaLog.info("encounter " + e.id + ": " + e.points + " fleet points scaled to " + points + " by setting " + e.sizeScale.setting);
+            FleetParamsV3 p = new FleetParamsV3(locInHyper, e.faction, e.quality, e.fleetType, points, 0f, 0f, 0f, 0f, 0f, 0f);
             p.ignoreMarketFleetSizeMult = true;
             f = FleetFactoryV3.createFleet(p);
         }

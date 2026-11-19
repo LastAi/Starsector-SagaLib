@@ -6,6 +6,7 @@ import com.fs.starfarer.api.util.Misc.Token;
 import lastai.sagalib.SagaLog;
 import lastai.sagalib.core.QuestLogic;
 import lastai.sagalib.game.GameEffects;
+import lastai.sagalib.game.GameMemory;
 import lastai.sagalib.game.SagaCommand;
 import lastai.sagalib.game.Saga;
 import lastai.sagalib.model.QuestDef;
@@ -28,6 +29,7 @@ public class SF_Reward extends SagaCommand {
             SagaLog.error("SF_Reward in rule " + ruleId + ": unknown quest \"" + args.get(0) + "\"");
             return false;
         }
-        return QuestLogic.reward(q, q.id, args.get(1), new GameEffects(dialog == null ? null : dialog.getTextPanel()));
+        // SagaLib 1.3 (task #62): credits may be scaled by a mod setting ($global.<setting>)
+        return QuestLogic.reward(q, q.id, args.get(1), new GameEffects(dialog == null ? null : dialog.getTextPanel()), new GameMemory(memoryMap));
     }
 }

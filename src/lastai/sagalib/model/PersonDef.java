@@ -30,12 +30,27 @@ public final class PersonDef {
     public final List<PhraseDef> phrases = new ArrayList<PhraseDef>();
     public String description;
     public String source;
+    /** SagaLib 1.3: only with / only without these mods (modsWith, modsWithout, modsAny). */
+    public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
+    /** SagaLib 1.3 (task #70): only present while their market's owner gets on with a faction; null = always. */
+    public Presence presence;
+
+    /** "presence": { "faction", "atLeast", "elsewhere" } (docs/FORMAT.md, "Presence"). */
+    public static final class Presence {
+        /** The faction they're loyal to (default: their own). */
+        public String faction;
+        /** A RepLevel name, or "notHostile". */
+        public String atLeast;
+        /** A market they go to while away (listed in its comm directory); null = nowhere. */
+        public String elsewhere;
+    }
 
     public boolean isContact() { return contactTypes != null; }
 
     public static PersonDef parse(JSONObject o, String path, JsonReader r) {
         PersonDef p = new PersonDef();
         p.source = r.file + " " + path;
+        p.gate = lastai.sagalib.core.ModGate.parse(o, path, r);
         p.id = r.str(o, "id", path, true, null);
         if (p.id == null) return null;
         JSONObject name = r.obj(o, "name", path, false);
@@ -70,6 +85,23 @@ public final class PersonDef {
             String cp = JsonReader.at(path, "contact");
             p.contactTypes = r.strings(c, "types", cp);
             p.importance = r.str(c, "importance", cp, false, "MEDIUM");
+        }
+        JSONObject pr = r.obj(o, "presence", path, false);
+        if (pr != null) {
+            String prp = JsonReader.at(path, "presence");
+            Presence x = new Presence();
+            x.faction = r.str(pr, "faction", prp, false, p.faction);
+            if (x.faction == null || x.faction.isEmpty()) x.faction = p.faction;
+            x.atLeast = r.str(pr, "atLeast", prp, false, "NEUTRAL");
+            String el = r.str(pr, "elsewhere", prp, false, "");
+            x.elsewhere = el == null || el.isEmpty() ? null : el;
+            if (lastai.sagalib.core.Presence.level(x.atLeast) == null) {
+                r.error(JsonReader.at(prp, "atLeast"), "unknown level \"" + x.atLeast + "\" (" + lastai.sagalib.core.Presence.LEVELS + " or notHostile); the person is always present");
+            } else if (!"market".equals(p.placementAt)) {
+                r.error(prp, "only a person placed at a market can have a presence; ignored");
+            } else {
+                p.presence = x;
+            }
         }
         p.tags.addAll(r.strings(o, "tags", path));
         for (JsonReader.Indexed e : r.objects(o, "phrases", path)) {

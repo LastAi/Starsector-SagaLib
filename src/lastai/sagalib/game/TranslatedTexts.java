@@ -75,6 +75,76 @@ public final class TranslatedTexts {
             }
         }
         if (n > 0) SagaLog.info("translation: " + n + " item names and descriptions");
+        applySpecVersions(c);
+    }
+
+    /**
+     * SagaLib 1.3: text.json versions by installed mods: names, descriptions, icons and prices for
+     * the mods enabled now (not the save's start record: specs are set before any save loads).
+     */
+    static void applySpecVersions(Content c) {
+        for (Content.TextVersions tv : c.textVersions) {
+            try {
+                java.util.List<String> on = new java.util.ArrayList<String>();
+                for (String m : tv.mentioned) if (lastai.sagalib.core.Mods.enabledNow(m)) on.add(m);
+                Map<String, Map<String, Map<String, Object>>> ch = lastai.sagalib.core.Versions.specChanges(tv.json, on);
+                int n = 0;
+                Map<String, Map<String, Object>> items = ch.get("items");
+                if (items != null) for (Map.Entry<String, Map<String, Object>> e : items.entrySet()) n += item(tv, e.getKey(), e.getValue());
+                Map<String, Map<String, Object>> descs = ch.get("descriptions");
+                if (descs != null) for (Map.Entry<String, Map<String, Object>> e : descs.entrySet()) {
+                    int bar = e.getKey().lastIndexOf('|');
+                    if (bar <= 0) {
+                        SagaLog.warn("versions: " + tv.file + ": description \"" + e.getKey() + "\" should be <id>|<TYPE>");
+                        continue;
+                    }
+                    try {
+                        Description d = Global.getSettings().getDescription(e.getKey().substring(0, bar), Description.Type.valueOf(e.getKey().substring(bar + 1)));
+                        if (d == null) continue;
+                        Map<String, Object> f = e.getValue();
+                        if (f.containsKey("text1")) d.setText1(String.valueOf(f.get("text1")));
+                        if (f.containsKey("text2")) d.setText2(String.valueOf(f.get("text2")));
+                        if (f.containsKey("text3")) d.setText3(String.valueOf(f.get("text3")));
+                        n++;
+                    } catch (Throwable t) {
+                        SagaLog.warn("versions: " + tv.file + ": description " + e.getKey() + " couldn't be changed (" + t + ")");
+                    }
+                }
+                SagaLog.info("versions: " + tv.file + ": item texts for " + lastai.sagalib.core.Versions.key(on) + " (enabled now), " + n + " items and descriptions changed");
+            } catch (Throwable t) {
+                SagaLog.error("versions: " + tv.file + " failed", t);
+            }
+        }
+    }
+
+    /** One commodity or special item: name, desc (special items), icon, basePrice. 1 if changed. */
+    private static int item(Content.TextVersions tv, String id, Map<String, Object> f) {
+        String name = f.containsKey("name") ? String.valueOf(f.get("name")) : null;
+        String desc = f.containsKey("desc") ? String.valueOf(f.get("desc")) : null;
+        String icon = f.containsKey("icon") ? String.valueOf(f.get("icon")) : null;
+        Float price = f.get("basePrice") instanceof Number ? ((Number) f.get("basePrice")).floatValue() : null;
+        try {
+            CommoditySpecAPI cs = Global.getSettings().getCommoditySpec(id);
+            if (cs != null) {
+                if (name != null) cs.setName(name);
+                if (icon != null && Textures.ensure(icon)) cs.setIconName(icon);
+                if (price != null) cs.setBasePrice(price);
+                if (desc != null) SagaLog.warn("versions: " + tv.file + ": " + id + " is a commodity; its description is descriptions." + id + "|RESOURCE.text1");
+                return 1;
+            }
+        } catch (Throwable ignored) { /* not a commodity */ }
+        try {
+            SpecialItemSpecAPI ss = Global.getSettings().getSpecialItemSpec(id);
+            if (ss != null) {
+                if (name != null) ss.setName(name);
+                if (desc != null) ss.setDesc(desc);
+                if (icon != null && Textures.ensure(icon)) ss.setIconName(icon);
+                if (price != null) ss.setBasePrice(price);
+                return 1;
+            }
+        } catch (Throwable ignored) { /* not a special item */ }
+        SagaLog.warn("versions: " + tv.file + ": item " + id + " isn't a commodity or special item; unchanged");
+        return 0;
     }
 
     public static void applySave() {

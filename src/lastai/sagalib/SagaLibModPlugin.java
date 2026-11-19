@@ -22,6 +22,8 @@ public final class SagaLibModPlugin extends BaseModPlugin {
     public void onApplicationLoad() {
         Saga.checkGameVersion();
         Saga.reload();
+        // SagaLib 1.3 (task #61): the sector as quests need it (which places and people exist, market owners)
+        lastai.sagalib.core.Places.setup(new lastai.sagalib.game.SectorPlaces());
         // SagaLib 1.2: an enabled translation renames the mod's items and changes its descriptions
         step("translation", new Runnable() { public void run() { lastai.sagalib.game.TranslatedTexts.applySpecs(); } });
         // SagaLib 1.2: random encounters from encounter pools, as one of vanilla's encounter creators
@@ -30,6 +32,10 @@ public final class SagaLibModPlugin extends BaseModPlugin {
 
     @Override
     public void onNewGame() {
+        // SagaLib 1.3: record which optional and incompatible mods this game starts with, before anything uses them
+        step("mods", new Runnable() { public void run() { lastai.sagalib.core.Mods.resetSkipped(); lastai.sagalib.game.ModNotices.run(false); } });
+        // SagaLib 1.3: each item's version by installed mods, chosen from the record before systems are built
+        step("versions", new Runnable() { public void run() { lastai.sagalib.game.ItemVersions.run(); } });
         // like a SectorGeneratorPlugin: new systems (with their markets) and additions to existing ones
         step("systems", new Runnable() { public void run() { SystemBuilder.onNewGame(); } });
     }
@@ -58,13 +64,29 @@ public final class SagaLibModPlugin extends BaseModPlugin {
 
     @Override
     public void onGameLoad(final boolean newGame) {
+        // SagaLib 1.3: the start record (a content mod new to this save is recorded now), the log
+        // lines and the one-time notice when the mods differ from it
+        step("mods", new Runnable() {
+            public void run() {
+                if (!newGame) lastai.sagalib.core.Mods.resetSkipped();
+                lastai.sagalib.game.ModNotices.run(true);
+            }
+        });
+        // SagaLib 1.3 (task #62): the mods' settings as $global.<id> (LunaLib's values, else the defaults), before anything reads quests
+        step("settings", new Runnable() { public void run() { lastai.sagalib.game.ModSettings.apply(); } });
+        // SagaLib 1.3: versions by installed mods: choose new items, put this save's versions in place
+        step("versions", new Runnable() { public void run() { lastai.sagalib.game.ItemVersions.run(); } });
         step("phrases", new Runnable() { public void run() { PhraseTokens.register(); lastai.sagalib.game.TextTokens.register(); } });
         step("systems", new Runnable() { public void run() { SystemBuilder.onGameLoad(); SystemBuilder.applyWorldChanges(); } });
+        // SagaLib 1.3 (task #61): Nexerelin never invades the markets marked so
+        step("invasion protection", new Runnable() { public void run() { SystemBuilder.protectMarkets(); } });
         // SagaLib 1.2: names the save keeps (systems, places, markets, factions) follow the enabled translation
         step("translation", new Runnable() { public void run() { lastai.sagalib.game.TranslatedTexts.applySave(); } });
         step("scatter", new Runnable() { public void run() { if (!newGame) lastai.sagalib.quest.ScatterBuilder.run(false); } });
         step("people", new Runnable() { public void run() { People.applyAll(); } });
         step("faction changes", new Runnable() { public void run() { Factions.applyScripted(); } });
+        // SagaLib 1.3 (task #70): who is away (their market's owner and its relations), applied to the comm directories
+        step("presence", new Runnable() { public void run() { lastai.sagalib.game.PresenceRuntime.onLoad(); } });
         step("reconciliation", new Runnable() { public void run() { SaveReconcile.run(); } });
         // encounters (spawns, outcomes) and quest timers: transient, so re-added on every load
         step("encounters", new Runnable() {

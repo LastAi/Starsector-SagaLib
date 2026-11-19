@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Everything the enabled content mods ship, read through the merged index
@@ -25,7 +26,7 @@ import java.util.Map;
 public final class Content {
     public static final String INDEX = "data/config/sagaforge/content.csv";
     public static final List<String> TYPES = Collections.unmodifiableList(
-            java.util.Arrays.asList("quest", "people", "factions", "system", "encounter", "profiles", "pool", "scatter", "strings", "translation", "events", "progress"));
+            java.util.Arrays.asList("quest", "people", "factions", "system", "encounter", "profiles", "pool", "scatter", "strings", "translation", "events", "progress", "mods", "settings"));
 
     /** Where files come from: the game's loaders in game, files on disk in the tests. */
     public interface Source {
@@ -70,6 +71,10 @@ public final class Content {
     public final Map<String, String> originals = new LinkedHashMap<String, String>();
     /** The mods that listed files. */
     public final List<String> mods = new ArrayList<String>();
+    /** SagaLib 1.3: each content mod's list of other mods (data/sagaforge/mods.json), by the mod's id. */
+    public final Map<String, Mods.ModList> modLists = new LinkedHashMap<String, Mods.ModList>();
+    /** SagaLib 1.3 (task #62): every content mod's settings (value fields of its LunaSettings.csv), in file order. */
+    public final List<Settings.Field> settings = new ArrayList<Settings.Field>();
 
     public static Content empty() { return new Content(); }
 
@@ -109,6 +114,10 @@ public final class Content {
             if ("profiles".equals(type) && !src.devMode()) continue;
             if ("translation".equals(type)) continue; // read first (loadTranslations)
             String file = path + " (mod " + mod + ")";
+            if ("settings".equals(type)) {
+                c.loadSettings(path, mod, file, where, src);
+                continue;
+            }
             JSONObject json;
             try {
                 json = src.load(path, mod);
@@ -128,6 +137,20 @@ public final class Content {
             c.add(id, type, mod, file, json, replaced);
         }
         return c;
+    }
+
+    /** SagaLib 1.3 (task #62): a mod's settings page (its LunaSettings.csv), read without LunaLib. */
+    private void loadSettings(String path, String mod, String file, String where, Source src) {
+        try {
+            JSONArray csv = src.loadCsv(path, mod);
+            if (csv == null) {
+                problems.error(file, "", "missing; listed in " + where);
+                return;
+            }
+            Settings.read(mod, csv, settings, problems, file);
+        } catch (Throwable t) {
+            problems.error(file, "", "can't read it (" + t.getMessage() + "); listed in " + where);
+        }
     }
 
     /** Reads every translation row; one per content mod is used (the first listed), others are reported. */
@@ -169,7 +192,234 @@ public final class Content {
 
     /** Adds one file's content; {@code replaced} = the texts a translation replaced in it (key → original). */
     public void add(String id, String type, String mod, String file, JSONObject json, Map<String, String> replaced) {
+        // SagaLib 1.3: an item with versions by installed mods (docs/FORMAT.md "Versions by installed mods")
+        if (VERSIONED_TYPES.contains(type) && json != null && ("people".equals(type) ? peopleHaveVersions(json) : Versions.has(json))) {
+            if ("people".equals(type)) addPeopleVersioned(id, mod, file, json, replaced);
+            else addVersioned(id, type, mod, file, json, replaced);
+            return;
+        }
+        addPlain(id, type, mod, file, json, replaced);
+    }
+
+    // ------------------------------------------------------------------ SagaLib 1.3: versions
+
+    /** Content types whose items may have versions. */
+    public static final List<String> VERSIONED_TYPES = Collections.unmodifiableList(
+            java.util.Arrays.asList("quest", "people", "system", "encounter", "pool", "events", "progress", "scatter", "factions"));
+
+    /** SagaLib 1.3: every item with versions ("person:sfa_reyes" → its versions, parsed). */
+    public final Map<String, Versions.Item> versioned = new LinkedHashMap<String, Versions.Item>();
+
+    /** SagaLib 1.3: a text.json with versions (names, descriptions, icons and prices by installed mods). */
+    public static final class TextVersions {
+        public final String mod;
+        public final String file;
+        public final JSONObject json;
+        public final List<String> mentioned;
+
+        TextVersions(String mod, String file, JSONObject json) {
+            this.mod = mod;
+            this.file = file;
+            this.json = json;
+            this.mentioned = Versions.mentioned(json);
+        }
+    }
+
+    public final List<TextVersions> textVersions = new ArrayList<TextVersions>();
+
+    private interface Variant {
+        /** Parses one version's resolved JSON into {@code scratch}; returns the definition (null = unusable). */
+        Object parse(JSONObject resolved, Content scratch);
+    }
+
+    private static boolean peopleHaveVersions(JSONObject json) {
+        JSONArray a = json.optJSONArray("people");
+        for (int i = 0; a != null && i < a.length(); i++) if (Versions.has(a.optJSONObject(i))) return true;
+        return false;
+    }
+
+    /** The definition of this type and id now in the maps (not factions). */
+    private Object current(String type, String id) {
+        if ("quest".equals(type)) return quests.get(id);
+        if ("people".equals(type) || "person".equals(type)) return people.get(id);
+        if ("system".equals(type)) return systems.get(id);
+        if ("encounter".equals(type)) return encounters.get(id);
+        if ("pool".equals(type)) return pools.get(id);
+        if ("events".equals(type)) return events.get(id);
+        if ("progress".equals(type)) return progress.get(id);
+        if ("scatter".equals(type)) return scatters.get(id);
+        return null;
+    }
+
+    private Set<String> problemTexts(int from) {
+        Set<String> out = new java.util.HashSet<String>();
+        List<Problems.Problem> all = problems.all();
+        for (int i = from; i < all.size(); i++) out.add(all.get(i).toString());
+        return out;
+    }
+
+    /** A whole file with versions: quest, system, encounter, pool, events, progress, scatter, factions. */
+    private void addVersioned(final String id, final String type, final String mod, final String file, final JSONObject json, final Map<String, String> replaced) {
+        final boolean fac = "factions".equals(type);
+        String itemId = fac ? mod : json.optString("id", "");
+        Object before = fac ? null : current(type, itemId);
+        int nf = factions.size();
+        int p0 = problems.all().size();
+        addPlain(id, type, mod, file, Versions.resolve(json, Collections.<String>emptyList()).value, replaced);
+        Set<String> known = problemTexts(p0);
+        Object def = fac ? (factions.size() > nf ? factions.get(factions.size() - 1) : null) : current(type, itemId);
+        if (def == null || def == before) return; // unreadable or a duplicate id: already reported
+        register(type, itemId, mod, file, "$", json, def, known, new Variant() {
+            public Object parse(JSONObject resolved, Content scratch) {
+                scratch.addPlain(id, type, mod, file, resolved, replaced);
+                return fac ? (scratch.factions.isEmpty() ? null : scratch.factions.get(0)) : scratch.current(type, resolved.optString("id", ""));
+            }
+        });
+    }
+
+    /** A people file where some people have versions (each person's own list). */
+    private void addPeopleVersioned(final String id, final String mod, final String file, final JSONObject json, final Map<String, String> replaced) {
+        JSONArray arr = json.optJSONArray("people");
+        final JSONObject baseFile = (JSONObject) Versions.copy(json);
+        JSONArray baseArr = baseFile.optJSONArray("people");
+        List<Integer> withVersions = new ArrayList<Integer>();
+        try {
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject e = arr.optJSONObject(i);
+                if (!Versions.has(e)) continue;
+                baseArr.put(i, Versions.resolve(e, Collections.<String>emptyList()).value);
+                withVersions.add(i);
+            }
+        } catch (Exception e) {
+            problems.error(file, "$.people", "versions could not be read: " + e);
+            addPlain(id, "people", mod, file, json, replaced);
+            return;
+        }
+        Set<String> before = new java.util.HashSet<String>(people.keySet());
+        int p0 = problems.all().size();
+        addPlain(id, "people", mod, file, baseFile, replaced);
+        Set<String> known = problemTexts(p0);
+        for (final int i : withVersions) {
+            JSONObject e = arr.optJSONObject(i);
+            final String pid = e.optString("id", "");
+            PersonDef def = people.get(pid);
+            if (def == null || before.contains(pid)) continue;
+            register("person", pid, mod, file, "$.people[" + i + "]", e, def, known, new Variant() {
+                public Object parse(JSONObject resolved, Content scratch) {
+                    JSONObject f = (JSONObject) Versions.copy(baseFile);
+                    try {
+                        f.getJSONArray("people").put(i, resolved);
+                    } catch (Exception ex) {
+                        return null;
+                    }
+                    scratch.addPlain(id, "people", mod, file, f, replaced);
+                    return scratch.people.get(pid);
+                }
+            });
+        }
+    }
+
+    /**
+     * Parses every version of one item (each subset of the mods it mentions) and registers it.
+     * Problems that only a version has are reported once, tagged with the version's key.
+     */
+    private void register(String type, String itemId, String mod, String file, String path, JSONObject raw, Object def, Set<String> known, Variant fn) {
+        String kind = "people".equals(type) ? "person" : type;
+        String ref = kind + ":" + itemId;
+        List<String> mentioned = Versions.mentioned(raw);
+        if (mentioned.size() > Versions.MAX_MODS) {
+            problems.error(file, JsonReader.at(path, "versions"), "the versions name " + mentioned.size() + " mods " + mentioned + "; at most "
+                    + Versions.MAX_MODS + " are supported: only the base is used");
+            mentioned = Collections.emptyList();
+        }
+        if (versioned.containsKey(ref)) {
+            problems.error(file, JsonReader.at(path, "versions"), kind + " " + itemId + " already has versions from " + versioned.get(ref).source + "; these are ignored");
+            return;
+        }
+        Versions.Item it = new Versions.Item(kind, itemId, mod, file + " at " + path, raw, mentioned);
+        it.defs.put(Versions.BASE, def);
+        it.active = def;
+        Set<String> reported = new java.util.HashSet<String>(known);
+        Set<String> conflicts = new java.util.HashSet<String>();
+        for (List<String> s : Versions.subsets(mentioned)) {
+            String key = Versions.key(s);
+            Versions.Result res = Versions.resolve(raw, s);
+            for (String e : res.errors) {
+                int colon = e.indexOf(": ");
+                String p = JsonReader.at(path, colon > 0 ? e.substring(0, colon) : e);
+                String msg = colon > 0 ? e.substring(colon + 2) : "can't be used";
+                if (reported.add("E " + p + msg)) problems.error(file, p, msg);
+            }
+            for (String c : res.conflicts) {
+                if (conflicts.add(c)) {
+                    problems.warn(file, JsonReader.at(path, "versions"), "versions " + res.conflictVersions.get(c) + " are equally specific and set \"" + c
+                            + "\" to different values (with " + key + "); the later one in the file wins");
+                }
+            }
+            if (s.isEmpty()) continue;
+            Content scratch = new Content();
+            Object vdef;
+            try {
+                vdef = fn.parse(res.value, scratch);
+            } catch (Throwable t) {
+                vdef = null;
+                scratch.problems.error(file, path, "could not be read: " + t);
+            }
+            for (Problems.Problem p : scratch.problems.all()) {
+                if (!reported.add(p.toString())) continue;
+                if (p.error) problems.error(p.file, p.path, p.message + " (in version " + key + ")");
+                else problems.warn(p.file, p.path, p.message + " (in version " + key + ")");
+            }
+            if (vdef == null) {
+                problems.error(file, path, "version " + key + " can't be used; the base is used instead");
+                vdef = def;
+            }
+            it.defs.put(key, vdef);
+        }
+        versioned.put(ref, it);
+    }
+
+    /**
+     * Puts the item's version {@code key} (unknown: the base) into the maps, in place of the one
+     * there, phrases included. Every item is activated on every load, so another save starts clean.
+     */
+    public void activate(Versions.Item it, String key) {
+        Object def = it.defs.get(key);
+        if (def == null) def = it.defs.get(Versions.BASE);
+        Object old = it.active;
+        if (def == null || def == old) return;
+        if ("quest".equals(it.kind)) {
+            quests.put(it.id, (QuestDef) def);
+            swapPhrases(((QuestDef) old).phrases, ((QuestDef) def).phrases);
+        } else if ("person".equals(it.kind)) {
+            people.put(it.id, (PersonDef) def);
+            swapPhrases(((PersonDef) old).phrases, ((PersonDef) def).phrases);
+        } else if ("system".equals(it.kind)) systems.put(it.id, (SystemDef) def);
+        else if ("encounter".equals(it.kind)) encounters.put(it.id, (EncounterDef) def);
+        else if ("pool".equals(it.kind)) pools.put(it.id, (PoolDef) def);
+        else if ("events".equals(it.kind)) events.put(it.id, (lastai.sagalib.model.EventsDef) def);
+        else if ("progress".equals(it.kind)) progress.put(it.id, (lastai.sagalib.model.ProgressDef) def);
+        else if ("scatter".equals(it.kind)) scatters.put(it.id, (lastai.sagalib.model.ScatterDef) def);
+        else if ("factions".equals(it.kind)) {
+            for (int i = 0; i < factions.size(); i++) if (factions.get(i) == old) factions.set(i, (FactionsDef) def);
+        }
+        it.active = def;
+    }
+
+    private void swapPhrases(List<PhraseDef> old, List<PhraseDef> now) {
+        for (PhraseDef p : old) if (phrases.get(p.token) == p) phrases.remove(p.token);
+        for (PhraseDef p : now) if (!phrases.containsKey(p.token)) phrases.put(p.token, p);
+    }
+
+    /** The key of the version now active ("base", "a+b"). */
+    public static String activeKey(Versions.Item it) {
+        for (Map.Entry<String, Object> e : it.defs.entrySet()) if (e.getValue() == it.active) return e.getKey();
+        return Versions.BASE;
+    }
+
+    private void addPlain(String id, String type, String mod, String file, JSONObject json, Map<String, String> replaced) {
         JsonReader r = new JsonReader(file, problems);
+        r.mod = mod;
         try {
             if ("quest".equals(type)) addQuest(QuestDef.parse(json, r), r);
             else if ("people".equals(type)) addPeople(json, r);
@@ -212,6 +462,16 @@ public final class Content {
                     if (old != null) r.error("$.id", "event scheduler \"" + ev.id + "\" is already defined by " + old.source + "; this one is skipped");
                     else events.put(ev.id, ev);
                 }
+            } else if ("mods".equals(type)) {
+                // SagaLib 1.3: the mod's list of other mods (required, optional, incompatible)
+                Mods.ModList l = Mods.ModList.parse(json, r);
+                if (l != null) {
+                    if (!l.owner.equals(mod)) r.error("$.mod", "says it is the list of " + l.owner + ", but it ships with " + mod + "; using " + mod);
+                    Mods.ModList fixed = l.owner.equals(mod) ? l : new Mods.ModList(mod, l.name, l.prefix);
+                    if (fixed != l) fixed.entries.addAll(l.entries);
+                    fixed.source = file;
+                    modLists.put(mod, fixed);
+                }
             } else if ("strings".equals(type)) {
                 addStrings(id, json, r, replaced);
             } else if ("scatter".equals(type)) {
@@ -238,6 +498,14 @@ public final class Content {
      */
     private void addStrings(String id, JSONObject json, JsonReader r, Map<String, String> replaced) {
         if (!r.checkFormat(json)) return;
+        // SagaLib 1.3: versions by installed mods (applied at application load with the mods enabled then)
+        if (Versions.has(json)) {
+            for (String e : Versions.checkSpecVersions(json)) {
+                int colon = e.indexOf(": ");
+                r.error(colon > 0 ? "$." + e.substring(0, colon) : "$.versions", colon > 0 ? e.substring(colon + 2) : e);
+            }
+            textVersions.add(new TextVersions(r.mod, r.file, json));
+        }
         JSONObject rules = json.optJSONObject("rules");
         if (rules != null) {
             for (java.util.Iterator<?> it = rules.keys(); it.hasNext(); ) {
@@ -340,6 +608,8 @@ public final class Content {
         return quests.size() + " quests, " + people.size() + " people, " + phrases.size() + " phrases, " + factions.size()
                 + " faction files, " + systems.size() + " systems, " + encounters.size() + " encounters, " + pools.size() + " pools, " + events.size() + " event schedulers, " + progress.size() + " progress events, " + profiles.size()
                 + " test profiles from " + mods.size() + " mod(s); " + problems.errors() + " errors"
+                + (versioned.isEmpty() ? "" : "; " + versioned.size() + " items with versions")
+                + (settings.isEmpty() ? "" : "; " + settings.size() + " settings")
                 + (translations.isEmpty() ? "" : "; translations: " + translationSummary());
     }
 

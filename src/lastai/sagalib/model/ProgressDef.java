@@ -52,6 +52,8 @@ public final class ProgressDef {
     public final List<Stage> stages = new ArrayList<Stage>();
     public final List<Factor> factors = new ArrayList<Factor>();
     public String source;
+    /** SagaLib 1.3: only with / only without these mods (modsWith, modsWithout, modsAny). */
+    public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
 
     public Stage stage(String id) {
         for (Stage s : stages) if (s.id.equals(id)) return s;
@@ -69,6 +71,7 @@ public final class ProgressDef {
         d.id = r.str(o, "id", "$", true, null);
         if (d.id == null) return null;
         d.source = r.file;
+        d.gate = lastai.sagalib.core.ModGate.parse(o, "$", r);
         d.name = r.str(o, "name", "$", false, d.id);
         d.icon = r.str(o, "icon", "$", false, "");
         d.tag = r.str(o, "tag", "$", false, "");

@@ -33,6 +33,8 @@ public final class SystemDef {
         public final List<String> people = new ArrayList<String>();
         /** SagaLib 1.2 (Phase 7e, RC-R11): $core_noDeciv, as vanilla's pirate and Pather bases. */
         public boolean protectFromDeciv;
+        /** SagaLib 1.3 (task #61): $nex_uninvadable in its memory: Nexerelin never invades it (nothing without Nexerelin). */
+        public boolean protectFromInvasion;
     }
 
     /** SagaLib 1.2 (RC-F7): a drop group the entity's salvage rolls (vanilla addDropRandom / addDropValue). */
@@ -50,6 +52,8 @@ public final class SystemDef {
     }
 
     public static final class Entity {
+        /** SagaLib 1.3: only with / only without these mods (an addition to a system, or one of its objects). */
+        public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
         public String id;
         public String kind;
         /** planets.json type, custom_entities.json type, ring texture key, or a derelict's variant ("wreck" = random). */
@@ -112,6 +116,8 @@ public final class SystemDef {
     public String music;
     public final List<Entity> entities = new ArrayList<Entity>();
     public String source;
+    /** SagaLib 1.3: only with / only without these mods (modsWith, modsWithout, modsAny). */
+    public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
 
     public boolean isNew() { return "new".equals(kind); }
 
@@ -132,6 +138,7 @@ public final class SystemDef {
         if (!r.checkFormat(o)) return null;
         SystemDef s = new SystemDef();
         s.source = r.file;
+        s.gate = lastai.sagalib.core.ModGate.parse(o, "$", r);
         s.id = r.str(o, "id", "$", true, null);
         if (s.id == null) return null;
         s.name = r.str(o, "name", "$", false, s.id);
@@ -214,6 +221,7 @@ public final class SystemDef {
     static Entity parseEntity(JSONObject o, String path, JsonReader r) {
         Entity e = new Entity();
         e.where = r.file + " " + path;
+        e.gate = lastai.sagalib.core.ModGate.parse(o, path, r);
         e.id = r.str(o, "id", path, true, null);
         e.kind = r.str(o, "kind", path, true, null);
         if (e.id == null || e.kind == null) return null;
@@ -269,6 +277,8 @@ public final class SystemDef {
             md.people.addAll(r.strings(m, "people", mp));
             Boolean nd = r.bool(m, "protectFromDeciv", mp, false);
             md.protectFromDeciv = nd != null && nd;
+            Boolean ni = r.bool(m, "protectFromInvasion", mp, false);
+            md.protectFromInvasion = ni != null && ni;
             if (md.faction != null) e.market = md;
         }
         return e;

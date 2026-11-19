@@ -101,13 +101,14 @@ public final class JsonTests {
 
     public static void factions() throws Exception {
         FactionsDef f = FactionsDef.parse(Fx.json("{'format':1,'relations':{'vgc':{'hegemony':-0.5,'pirates':2}},"
-                + "'scripted':{'hegemony':[{'op':'remove','path':'knownShips.hulls','value':'colossus'},{'op':'add','path':'x','value':'y'}]}}"), reader());
+                + "'scripted':{'hegemony':[{'op':'remove','path':'knownShips.hulls','value':'colossus'},{'op':'add','path':'x','value':'y'},{'op':'grow','path':'x','value':'y'}]}}"), reader());
         T.eq(1, f.relations.size(), "relation outside -1..1 skipped");
         T.eq(-0.5f, f.relations.get(0).value, "relation value");
-        T.eq(1, f.scripted.size(), "only remove");
+        T.eq(1, f.scripted.size(), "only the known op and path");
         T.eq("colossus", f.scripted.get(0).value, "value");
         T.yes(problems.has("$.relations.vgc.pirates"), "relation path: " + problems.all());
-        T.yes(problems.has("$.scripted.hegemony[1].op"), "op path");
+        T.yes(problems.has("$.scripted.hegemony[1].path"), "unknown path (1.3: add is an op)");
+        T.yes(problems.has("$.scripted.hegemony[2].op"), "op path");
     }
 
     public static void profiles() throws Exception {

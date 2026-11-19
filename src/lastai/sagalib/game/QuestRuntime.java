@@ -40,10 +40,12 @@ public final class QuestRuntime {
         if (q == null) return false;
         Memory mem = new GameMemory(memoryMap);
         if (QuestLogic.isActive(mem, id)) return true;
+        // SagaLib 1.3: a quest only with / only without mods is never started
+        if (!skipChecks && !lastai.sagalib.core.Mods.allowed(GameMemory.global(), q.gate, "quest", id)) return false;
         if (q.isMission() && SagaQuest.running(id) == null) {
             if (dialog != null && memoryMap != null && id.equals(offeredMissionId(memoryMap))) acceptOffered(id, ruleId, dialog, memoryMap);
             if (SagaQuest.running(id) == null && startDirectly(q, dialog, memoryMap, skipChecks) == null) {
-                SagaLog.info("SF_Start " + id + " (rule " + ruleId + "): not started (its requires don't hold, a random target found nothing, or it already ran and isn't repeatable)");
+                SagaLog.info("SF_Start " + id + " (rule " + ruleId + "): not started (its requires don't hold, a place or person it needs is missing, a random target found nothing, or it already ran and isn't repeatable)");
                 return false;
             }
         }

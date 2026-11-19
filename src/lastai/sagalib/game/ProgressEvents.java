@@ -14,6 +14,7 @@ public final class ProgressEvents {
     public static void tick() {
         for (ProgressDef d : Saga.content().progress.values()) {
             if (SagaProgressEvent.get(d.id) != null) continue;
+            if (!lastai.sagalib.core.Mods.allowed(GameMemory.global(), d.gate, "progress event", d.id)) continue; // SagaLib 1.3
             if (Global.getSector().getMemoryWithoutUpdate().getBoolean(SagaProgressEvent.doneKey(d.id))) continue;
             boolean start;
             try {

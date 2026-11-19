@@ -50,6 +50,8 @@ public final class People {
         int made = 0, waiting = 0;
         for (PersonDef d : Saga.content().people.values()) {
             if (isGone(d.id)) continue; // written out of the story (SagaLib 1.1)
+            // SagaLib 1.3: only with / only without mods (a person already in the save stays, untouched)
+            if (!lastai.sagalib.core.Mods.allowed(GameMemory.global(), d.gate, "person", d.id)) continue;
             try {
                 boolean isNew = Global.getSector().getImportantPeople().getPerson(d.id) == null;
                 if (!apply(d)) waiting++;
@@ -115,6 +117,8 @@ public final class People {
     public static void placeAt(String personId, MarketAPI m) {
         if (isGone(personId)) return; // written out of the story (SagaLib 1.1)
         PersonDef d = Saga.content().people.get(personId);
+        // SagaLib 1.3: a person only with / only without mods is not created here either
+        if (d != null && !lastai.sagalib.core.Mods.allowed(GameMemory.global(), d.gate, "person", d.id)) return;
         PersonAPI p = Global.getSector().getImportantPeople().getPerson(personId);
         if (d != null) {
             if (p == null || !"market".equals(d.placementAt)) {

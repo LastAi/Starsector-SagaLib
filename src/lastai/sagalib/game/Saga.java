@@ -15,7 +15,7 @@ public final class Saga {
     private Saga() {}
 
     public static final String MOD_ID = "lastai_sagalib";
-    public static final String VERSION = "1.2.0";
+    public static final String VERSION = "1.3.0";
     /** Game versions this SagaLib was checked against; another one logs a warning. */
     public static final List<String> KNOWN_GAME_VERSIONS = Arrays.asList("0.98a-RC8", "0.98.5a-RC5");
 
@@ -54,6 +54,13 @@ public final class Saga {
         }
         SagaLog.info("content: " + c.summary());
         content = c;
+        // SagaLib 1.3: the content mods' lists of other mods, and which mods are enabled now
+        lastai.sagalib.core.Mods.setup(new lastai.sagalib.core.Mods.Enabled() {
+            @Override
+            public boolean isEnabled(String modId) { return Global.getSettings().getModManager().isModEnabled(modId); }
+        }, c.modLists);
+        // SagaLib 1.3 (task #59): MagicLib bounties through the guarded bridge (only when MagicLib is enabled)
+        MagicBounties.setup();
         return c;
     }
 

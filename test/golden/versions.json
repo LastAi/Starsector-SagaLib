@@ -1,0 +1,145 @@
+{
+  "name": "SagaLib 1.3 versions by installed mods: resolution (2 optional mods, 4 combinations, inheritance, a conflict), choosing at new game, a mod added or removed later changes nothing",
+  "quests": [],
+  "phrases": [],
+  "modLists": [
+    {
+      "format": 1,
+      "mod": "sfa",
+      "name": "Saga Forge 64 A",
+      "prefix": "sfa_",
+      "mods": [
+        { "id": "mod1", "name": "Mod One", "use": "optional" },
+        { "id": "mod2", "name": "Mod Two", "use": "optional" }
+      ]
+    }
+  ],
+  "enabled": [],
+  "versioned": [
+    {
+      "kind": "person",
+      "owner": "sfa",
+      "item": {
+        "id": "sfa_reyes",
+        "name": { "first": "Ilse", "last": "Reyes" },
+        "portrait": "graphics/portraits/a.png",
+        "placement": { "at": "market", "market": "jangala", "inCommDirectory": true },
+        "versions": [
+          { "id": "mod1", "modsWith": ["mod1"], "set": { "placement.market": "sfj_port" } },
+          { "id": "mod2", "modsWith": ["mod2"], "set": { "name.last": "Okafor", "portrait": "graphics/portraits/b.png" } }
+        ]
+      }
+    },
+    {
+      "kind": "quest",
+      "owner": "sfa",
+      "item": {
+        "id": "sfa_meet",
+        "title": "Meet Reyes",
+        "stages": [ { "id": "talk", "journal": "Meet Reyes." }, { "id": "done", "journal": "Done." } ],
+        "versions": [
+          { "id": "mod1+mod2", "modsWith": ["mod1", "mod2"], "set": { "stages[talk].journal": "Meet Reyes. She swapped her story." } }
+        ]
+      }
+    },
+    {
+      "kind": "pool",
+      "owner": "sfa",
+      "item": {
+        "id": "sfa_odds",
+        "nothing": 0,
+        "entries": [ { "id": "a", "weight": 1, "label": "first" }, { "id": "b", "weight": 2 } ],
+        "versions": [
+          { "id": "mod1", "modsWith": ["mod1"], "set": { "nothing": 1, "entries[a].label": null } },
+          { "id": "not2", "modsWithout": ["mod2"], "set": { "entries[b].weight": 3 } },
+          { "id": "mod2", "modsWith": ["mod2"], "set": { "nothing": 2, "entries[a].weight": 5 } }
+        ]
+      }
+    },
+    {
+      "kind": "factions",
+      "owner": "sfa",
+      "item": {
+        "format": 1,
+        "relations": { "sfa_f": { "hegemony": 0.2 } },
+        "scripted": { "sfa_f": [] },
+        "versions": [
+          { "id": "mod1", "modsWith": ["mod1"], "set": { "relations.sfa_f.hegemony": -0.5, "scripted.sfa_f": [ { "op": "set", "path": "displayName", "value": "Reyes Free Port" } ] } }
+        ]
+      }
+    }
+  ],
+  "steps": [
+    { "resolve": "person:sfa_reyes", "on": [], "conflicts": [],
+      "is": { "id": "sfa_reyes", "name": { "first": "Ilse", "last": "Reyes" }, "portrait": "graphics/portraits/a.png", "placement": { "at": "market", "market": "jangala", "inCommDirectory": true } } },
+    { "resolve": "person:sfa_reyes", "on": ["mod1"], "conflicts": [],
+      "is": { "id": "sfa_reyes", "name": { "first": "Ilse", "last": "Reyes" }, "portrait": "graphics/portraits/a.png", "placement": { "at": "market", "market": "sfj_port", "inCommDirectory": true } } },
+    { "resolve": "person:sfa_reyes", "on": ["mod2"], "conflicts": [],
+      "is": { "id": "sfa_reyes", "name": { "first": "Ilse", "last": "Okafor" }, "portrait": "graphics/portraits/b.png", "placement": { "at": "market", "market": "jangala", "inCommDirectory": true } } },
+    { "resolve": "person:sfa_reyes", "on": ["mod1", "mod2"], "conflicts": [],
+      "is": { "id": "sfa_reyes", "name": { "first": "Ilse", "last": "Okafor" }, "portrait": "graphics/portraits/b.png", "placement": { "at": "market", "market": "sfj_port", "inCommDirectory": true } } },
+
+    { "resolve": "quest:sfa_meet", "on": ["mod1"], "conflicts": [],
+      "is": { "id": "sfa_meet", "title": "Meet Reyes", "stages": [ { "id": "talk", "journal": "Meet Reyes." }, { "id": "done", "journal": "Done." } ] } },
+    { "resolve": "quest:sfa_meet", "on": ["mod1", "mod2"], "conflicts": [],
+      "is": { "id": "sfa_meet", "title": "Meet Reyes", "stages": [ { "id": "talk", "journal": "Meet Reyes. She swapped her story." }, { "id": "done", "journal": "Done." } ] } },
+
+    { "resolve": "pool:sfa_odds", "on": [], "conflicts": [],
+      "is": { "id": "sfa_odds", "nothing": 0, "entries": [ { "id": "a", "weight": 1, "label": "first" }, { "id": "b", "weight": 3 } ] } },
+    { "resolve": "pool:sfa_odds", "on": ["mod1"], "conflicts": [],
+      "is": { "id": "sfa_odds", "nothing": 1, "entries": [ { "id": "a", "weight": 1 }, { "id": "b", "weight": 3 } ] } },
+    { "resolve": "pool:sfa_odds", "on": ["mod2"], "conflicts": [],
+      "is": { "id": "sfa_odds", "nothing": 2, "entries": [ { "id": "a", "weight": 5, "label": "first" }, { "id": "b", "weight": 2 } ] } },
+    { "resolve": "pool:sfa_odds", "on": ["mod1", "mod2"], "conflicts": ["nothing"],
+      "is": { "id": "sfa_odds", "nothing": 2, "entries": [ { "id": "a", "weight": 5 }, { "id": "b", "weight": 2 } ] } },
+
+    { "resolve": "factions:sfa", "on": ["mod1"], "conflicts": [],
+      "is": { "format": 1, "relations": { "sfa_f": { "hegemony": -0.5 } }, "scripted": { "sfa_f": [ { "op": "set", "path": "displayName", "value": "Reyes Free Port" } ] } } },
+
+    { "newGame": true },
+    { "enabled": ["mod1", "mod2"] },
+    { "record": true, "notices": [] },
+    { "choose": true, "expect": {
+      "$global.sagaforge_ver_person_sfa_reyes": "mod1+mod2", "$global.sagaforge_ver_quest_sfa_meet": "mod1+mod2",
+      "$global.sagaforge_ver_pool_sfa_odds": "mod1+mod2", "$global.sagaforge_ver_factions_sfa": "mod1",
+      "$global.sfv_sfa_meet_mod1": "true", "$global.sfv_sfa_meet_mod2": "true" } },
+    { "chosen": "person:sfa_reyes",
+      "is": { "id": "sfa_reyes", "name": { "first": "Ilse", "last": "Okafor" }, "portrait": "graphics/portraits/b.png", "placement": { "at": "market", "market": "sfj_port", "inCommDirectory": true } } },
+    { "chosen": "quest:sfa_meet",
+      "is": { "id": "sfa_meet", "title": "Meet Reyes", "stages": [ { "id": "talk", "journal": "Meet Reyes. She swapped her story." }, { "id": "done", "journal": "Done." } ] } },
+
+    { "newGame": true },
+    { "enabled": ["mod1"] },
+    { "record": true, "notices": [] },
+    { "choose": true, "expect": {
+      "$global.sagaforge_ver_person_sfa_reyes": "mod1", "$global.sagaforge_ver_quest_sfa_meet": "mod1",
+      "$global.sfv_sfa_meet_mod1": "true", "$global.sfv_sfa_meet_mod2": "undefined" } },
+    { "chosen": "quest:sfa_meet",
+      "is": { "id": "sfa_meet", "title": "Meet Reyes", "stages": [ { "id": "talk", "journal": "Meet Reyes." }, { "id": "done", "journal": "Done." } ] } },
+    { "enabled": ["mod1", "mod2"] },
+    { "record": true, "notices": ["sfa:mod2:added"] },
+    { "choose": true, "expect": { "$global.sagaforge_ver_person_sfa_reyes": "mod1", "$global.sfv_sfa_meet_mod2": "undefined" } },
+    { "chosen": "person:sfa_reyes",
+      "is": { "id": "sfa_reyes", "name": { "first": "Ilse", "last": "Reyes" }, "portrait": "graphics/portraits/a.png", "placement": { "at": "market", "market": "sfj_port", "inCommDirectory": true } } },
+
+    { "newGame": true },
+    { "enabled": ["mod2"] },
+    { "record": true, "notices": [] },
+    { "choose": true, "expect": { "$global.sagaforge_ver_person_sfa_reyes": "mod2", "$global.sagaforge_ver_factions_sfa": "base", "$global.sfv_sfa_meet_mod1": "undefined", "$global.sfv_sfa_meet_mod2": "true" } },
+
+    { "newGame": true },
+    { "enabled": [] },
+    { "record": true, "notices": [] },
+    { "choose": true, "expect": { "$global.sagaforge_ver_person_sfa_reyes": "base", "$global.sagaforge_ver_quest_sfa_meet": "base", "$global.sfv_sfa_meet_mod1": "undefined" } },
+    { "chosen": "person:sfa_reyes",
+      "is": { "id": "sfa_reyes", "name": { "first": "Ilse", "last": "Reyes" }, "portrait": "graphics/portraits/a.png", "placement": { "at": "market", "market": "jangala", "inCommDirectory": true } } },
+
+    { "newGame": true },
+    { "enabled": ["mod1", "mod2"] },
+    { "record": true, "notices": [] },
+    { "choose": true },
+    { "enabled": ["mod2"] },
+    { "record": true, "notices": ["sfa:mod1:removed"] },
+    { "choose": true, "expect": { "$global.sagaforge_ver_person_sfa_reyes": "mod1+mod2", "$global.sfv_sfa_meet_mod1": "true" } }
+  ]
+}

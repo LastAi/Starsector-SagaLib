@@ -34,6 +34,7 @@ public final class ScatterBuilder {
         Memory mem = GameMemory.global();
         for (ScatterDef s : Saga.content().scatters.values()) {
             if (mem.get(doneKey(s.id)) != null) continue;
+            if (!lastai.sagalib.core.Mods.allowed(mem, s.gate, "scatter", s.id)) continue; // SagaLib 1.3
             if (!newGame && !s.addToExistingSaves) continue;
             try {
                 int n = place(s);

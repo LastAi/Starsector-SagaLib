@@ -43,6 +43,8 @@ public class SF_RollPool extends SagaCommand {
             return false;
         }
         GameMemory mem = new GameMemory(memoryMap);
+        // SagaLib 1.3: a pool only with / only without mods picks nothing
+        if (!lastai.sagalib.core.Mods.allowed(GameMemory.global(), pool.gate, "pool", id)) { mem.set(lastai.sagalib.core.Pools.PICK_KEY, lastai.sagalib.core.Pools.NOTHING); return true; }
         SectorEntityToken target = dialog != null ? dialog.getInteractionTarget() : null;
         boolean object = !"global".equals(args.size() > 1 ? args.get(1) : "") && target != null
                 && memoryMap != null && memoryMap.containsKey(MemKeys.ENTITY);

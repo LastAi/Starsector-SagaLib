@@ -17,8 +17,15 @@ if [ -d "$MOD_DIR/../../.cache" ]; then DEFAULT_BUILD="$MOD_DIR/../../.cache/sag
 BUILD_DIR="${BUILD_DIR:-$DEFAULT_BUILD}"
 
 # Optional bridges: <src-optional folder>|<jar glob under STARSECTOR_MODS>[|more]
-# None yet (MagicLib bounties come later, PLAN.md §10); see src-optional/README.md.
-BRIDGES=()
+# See src-optional/README.md. MagicLib (task #59): quests start and check its bounties.
+# LunaLib (task #62): the player's values of the mods' settings, and menu changes at once.
+# MagicLib (task #65): quests unlock its achievements (same folder as the bounties).
+# Nexerelin (task #65): the quest-skip plugin named in the mods' questSkip.json.
+BRIDGES=(
+  "magiclib|MagicLib*/jars/MagicLib.jar|MagicLib*/jars/MagicLib-Kotlin.jar|LazyLib*/jars/internal/Kotlin-Runtime.jar|LazyLib*/jars/LazyLib.jar"
+  "lunalib|LunaLib*/jars/LunaLib.jar|LazyLib*/jars/internal/Kotlin-Runtime.jar|LazyLib*/jars/LazyLib.jar"
+  "nexerelin|Nexerelin*/jars/ExerelinCore.jar|LazyLib*/jars/internal/Kotlin-Runtime.jar|LazyLib*/jars/LazyLib.jar"
+)
 
 find_jar() { # newest match of a glob under STARSECTOR_MODS, or nothing
   local matches=()

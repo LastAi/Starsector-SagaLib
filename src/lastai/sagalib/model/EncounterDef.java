@@ -19,6 +19,8 @@ public final class EncounterDef {
     /** fp (FleetFactoryV3 with combat points) or explicit (the listed variants). */
     public String size;
     public float points;
+    /** SagaLib 1.3 (task #62): scales {@link #points} (size fp only) by a mod setting (null = never scaled). */
+    public lastai.sagalib.core.Settings.Scale sizeScale;
     public final List<String> variants = new ArrayList<String>();
     /** null = the faction's default quality. */
     public Float quality;
@@ -54,6 +56,8 @@ public final class EncounterDef {
     public String defeated;
     public String avoided;
     public String source;
+    /** SagaLib 1.3: only with / only without these mods (modsWith, modsWithout, modsAny). */
+    public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
 
     /** SagaLib 1.1 (a fleet template, R27): ship names parallel to {@link #variants} ("" = the game's), the flagship's index (-1 = the game picks). */
     public final List<String> shipNames = new ArrayList<String>();
@@ -65,10 +69,17 @@ public final class EncounterDef {
 
     public boolean explicit() { return "explicit".equals(size); }
 
+    /** SagaLib 1.3 (task #62): the fleet points now (size fp scaled by {@link #sizeScale}; explicit fleets unchanged). */
+    public float scaledPoints(lastai.sagalib.core.Memory mem) {
+        if (explicit()) return points;
+        return lastai.sagalib.core.Settings.points(points, sizeScale, mem);
+    }
+
     public static EncounterDef parse(JSONObject o, JsonReader r) {
         if (!r.checkFormat(o)) return null;
         EncounterDef e = new EncounterDef();
         e.source = r.file;
+        e.gate = lastai.sagalib.core.ModGate.parse(o, "$", r);
         e.id = r.str(o, "id", "$", true, null);
         if (e.id == null) return null;
         e.name = r.str(o, "name", "$", false, e.id);
@@ -84,6 +95,7 @@ public final class EncounterDef {
         }
         Double pts = r.num(f, "points", "$.fleet", 50d);
         e.points = pts == null ? 50 : pts.floatValue();
+        e.sizeScale = lastai.sagalib.core.Settings.Scale.parse(f, "sizeScale", "$.fleet", r);
         e.variants.addAll(r.strings(f, "variants", "$.fleet"));
         if (e.explicit() && e.variants.isEmpty()) {
             r.error("$.fleet.variants", "an explicit fleet needs at least one variant");

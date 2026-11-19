@@ -24,7 +24,14 @@ public final class Reconciler {
     public static List<String> reconcile(Memory mem, Collection<String> questIds, Map<String, QuestDef> defs) {
         List<String> log = new ArrayList<String>();
         for (String q : questIds) {
-            if (!QuestLogic.ACTIVE.equals(mem.get(QuestLogic.stateKey(q)))) continue;
+            // SagaLib 1.3: a quest that ended before 1.3 gets its true/false ended key (quietly)
+            Object state = mem.get(QuestLogic.stateKey(q));
+            if (QuestLogic.SUCCESS.equals(state) || QuestLogic.FAIL.equals(state)) {
+                String k = QuestLogic.endedKey(q, QuestLogic.SUCCESS.equals(state));
+                if (mem.get(k) == null) mem.set(k, Boolean.TRUE);
+                continue;
+            }
+            if (!QuestLogic.ACTIVE.equals(state)) continue;
             QuestDef def = defs.get(q);
             if (def == null) {
                 log.add(q + ": no longer in any mod; left as it is");

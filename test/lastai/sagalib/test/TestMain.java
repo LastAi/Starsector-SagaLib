@@ -31,6 +31,13 @@ public final class TestMain {
                 SevenETests.class,
                 TranslationTests.class,
                 EventTests.class,
+                ModsTests.class,
+                VersionsTests.class,
+                BountyTests.class,
+                PresenceTests.class,
+                SettingsTests.class,
+                NexerelinTests.class,
+                QuestSkipTests.class,
                 GoldenTests.class,
                 SandboxTests.class,
         };

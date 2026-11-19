@@ -14,6 +14,8 @@ import java.util.List;
 public final class JsonReader {
     public final String file;
     public final Problems problems;
+    /** SagaLib 1.3: the mod that ships the file (owner of its mod conditions, {@link ModGate}); null in tests. */
+    public String mod;
 
     public JsonReader(String file, Problems problems) {
         this.file = file;

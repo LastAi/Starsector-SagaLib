@@ -31,6 +31,13 @@ public final class QuestLogic {
 
     public static String varKey(String q, String v) { return "$global." + q + "_" + v; }
 
+    /**
+     * SagaLib 1.3 (task #59): true once the quest has ended that way (it stays true when a
+     * repeatable quest runs again). A true/false key, for what can't test the state string:
+     * MagicLib's bounty triggers (trigger_memKeys_*) read Booleans in the sector's memory only.
+     */
+    public static String endedKey(String q, boolean success) { return "$global.sagaforge_" + (success ? "success" : "fail") + "_" + q; }
+
     /** notStarted, active, success or fail. */
     public static String state(Memory m, String q) {
         Object s = m.get(stateKey(q));
@@ -71,6 +78,8 @@ public final class QuestLogic {
         if (isActive(m, q)) return false;
         m.set(stateKey(q), ACTIVE);
         initVariables(m, def);
+        // SagaLib 1.3 (task #61): the owners of its markets, compared once a day
+        Places.remember(m, def, null);
         return true;
     }
 
@@ -83,15 +92,16 @@ public final class QuestLogic {
         m.set(stepKey(q), step);
         QuestDef.Stage st = def == null ? null : def.stage(step);
         if (st != null && (SUCCESS.equals(st.kind) || FAIL.equals(st.kind))) {
-            m.set(stateKey(q), st.kind);
+            end(m, q, SUCCESS.equals(st.kind));
             return st.kind;
         }
         return "normal";
     }
 
-    /** Ends a quest: state success or fail. */
+    /** Ends a quest: state success or fail, and its true/false ended key ({@link #endedKey}). */
     public static void end(Memory m, String q, boolean success) {
         m.set(stateKey(q), success ? SUCCESS : FAIL);
+        m.set(endedKey(q, success), Boolean.TRUE);
     }
 
     /**
@@ -128,18 +138,38 @@ public final class QuestLogic {
 
     /** Gives one reward of a quest. False (and a warning) if the quest has no such reward. */
     public static boolean reward(QuestDef def, String questId, String rewardId, Effects fx) {
+        return reward(def, questId, rewardId, fx, null);
+    }
+
+    /** SagaLib 1.3 (task #62): gives one reward; with a memory, its credits follow their creditsScale setting. */
+    public static boolean reward(QuestDef def, String questId, String rewardId, Effects fx, Memory mem) {
         QuestDef.Reward r = def == null ? null : def.reward(rewardId);
         if (r == null) {
             SagaLog.warn("SF_Reward: no reward \"" + rewardId + "\" in " + questId);
             return false;
         }
-        apply(r, fx);
+        apply(r, fx, mem);
         return true;
+    }
+
+    /** SagaLib 1.3 (task #62): a reward's credits, scaled by its creditsScale setting when a memory is given. */
+    public static long credits(QuestDef.Reward r, Memory mem) {
+        if (mem == null || r.creditsScale == null) return r.credits;
+        return Settings.credits(r.credits, r.creditsScale, mem);
     }
 
     /** Applies a reward in Play mode's order: credits, faction rep, person rep, items, loot (1.2), ships, XP, story points. */
     public static void apply(QuestDef.Reward r, Effects fx) {
-        if (r.credits != 0) fx.credits(r.credits);
+        apply(r, fx, null);
+    }
+
+    /** SagaLib 1.3 (task #62): {@link #apply(QuestDef.Reward, Effects)} with the credits scaled by a setting. */
+    public static void apply(QuestDef.Reward r, Effects fx, Memory mem) {
+        long credits = credits(r, mem);
+        if (credits != r.credits) {
+            SagaLog.info("reward " + r.id + ": " + r.credits + " credits scaled to " + credits + " by setting " + r.creditsScale.setting);
+        }
+        if (credits != 0) fx.credits(credits);
         for (QuestDef.Amount a : r.rep) fx.factionRep(a.id, a.amount);
         for (QuestDef.Amount a : r.personRep) fx.personRep(a.id, a.amount);
         for (QuestDef.Amount a : r.items) fx.item(a.id, (int) Math.round(a.amount));

@@ -50,6 +50,7 @@ public final class SystemBuilder {
     /** New game: every new system, and the additions to existing ones. */
     public static void onNewGame() {
         for (SystemDef s : Saga.content().systems.values()) {
+            if (!lastai.sagalib.core.Mods.allowed(GameMemory.global(), s.gate, "system", s.id)) continue; // SagaLib 1.3
             try {
                 if (s.isNew()) {
                     if (find(s) == null) buildNew(s);
@@ -63,8 +64,30 @@ public final class SystemBuilder {
     }
 
     /** Every load: missing opt-in systems, additions to existing systems, then people (who may now find their market). */
+    /** Nexerelin 0.12.2d (ExerelinConstants.MEMORY_KEY_UNINVADABLE): NexUtilsMarket.canBeInvaded is false while it is true. */
+    public static final String UNINVADABLE_KEY = "$nex_uninvadable";
+
+    /**
+     * SagaLib 1.3 (task #61): on every load, the mod's markets marked "protectFromInvasion" get
+     * $nex_uninvadable (also in saves made before the mark was added; never unset by SagaLib, so
+     * another mod's protection stays).
+     */
+    public static void protectMarkets() {
+        for (SystemDef s : Saga.content().systems.values()) {
+            for (SystemDef.Entity e : s.entities) {
+                if (e.market == null || !e.market.protectFromInvasion) continue;
+                com.fs.starfarer.api.campaign.SectorEntityToken t = Global.getSector().getEntityById(e.id);
+                MarketAPI m = t != null ? t.getMarket() : Global.getSector().getEconomy().getMarket(e.market.id);
+                if (m == null || m.getMemoryWithoutUpdate().getBoolean(UNINVADABLE_KEY)) continue;
+                m.getMemoryWithoutUpdate().set(UNINVADABLE_KEY, true);
+                SagaLog.info("market " + m.getId() + ": protected from invasion ($nex_uninvadable)");
+            }
+        }
+    }
+
     public static void onGameLoad() {
         for (SystemDef s : Saga.content().systems.values()) {
+            if (!lastai.sagalib.core.Mods.allowed(GameMemory.global(), s.gate, "system", s.id)) continue; // SagaLib 1.3
             try {
                 if (s.isNew()) {
                     if (s.addToExistingSaves && find(s) == null) {
@@ -151,6 +174,7 @@ public final class SystemBuilder {
         for (String p : order.problems) SagaLog.error("system " + s.id + " (" + s.source + "): " + p);
         int n = 0;
         for (SystemDef.Entity e : order.entities) {
+            if (!lastai.sagalib.core.Mods.allowed(GameMemory.global(), e.gate, "object", e.id)) continue; // SagaLib 1.3
             try {
                 SectorEntityToken focus = "star".equals(e.orbit.focus) ? star : Global.getSector().getEntityById(e.orbit.focus);
                 if (focus == null) {
@@ -416,6 +440,7 @@ public final class SystemBuilder {
         }
         m.setFreePort(md.freePort);
         if (md.protectFromDeciv) m.getMemoryWithoutUpdate().set(com.fs.starfarer.api.impl.campaign.intel.deciv.DecivTracker.NO_DECIV_KEY, true);
+        if (md.protectFromInvasion) m.getMemoryWithoutUpdate().set(UNINVADABLE_KEY, true);
         m.setSurveyLevel(MarketAPI.SurveyLevel.FULL);
         entity.setMarket(m);
         entity.setFaction(md.faction);
@@ -464,6 +489,7 @@ public final class SystemBuilder {
      */
     public static void restoreRuins() {
         for (SystemDef s : Saga.content().systems.values()) {
+            if (!lastai.sagalib.core.Mods.allowed(GameMemory.global(), s.gate, "system", s.id)) continue; // SagaLib 1.3
             for (SystemDef.Entity e : s.entities) {
                 if (!e.ruinsUnexplored) continue;
                 SectorEntityToken t = Global.getSector().getEntityById(e.id);
@@ -483,6 +509,7 @@ public final class SystemBuilder {
      */
     public static void reportSpacing() {
         for (SystemDef s : Saga.content().systems.values()) {
+            if (!lastai.sagalib.core.Mods.allowed(GameMemory.global(), s.gate, "system", s.id)) continue; // SagaLib 1.3
             if (!s.isNew()) continue;
             StarSystemAPI sys = find(s);
             if (sys == null) continue;

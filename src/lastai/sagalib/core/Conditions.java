@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * Evaluates rules.csv condition lines (docs/FORMAT.md, "Conditions"): memory comparisons here,
- * SagaLib's own SF_ conditions through {@link QuestLogic}, every other command through a
+ * SagaLib's own SF_ conditions through {@link QuestLogic}, {@link Mods} and {@link Bounties}, every other command through a
  * {@link Commands} resolver (the game adapter runs the real rule command).
  */
 public final class Conditions {
@@ -17,10 +17,25 @@ public final class Conditions {
 
     private final Memory memory;
     private final Commands commands;
+    /** SagaLib 1.3: the content mod these conditions belong to (whose start record SF_HasMod reads); null = any. */
+    private String owner;
 
     public Conditions(Memory memory, Commands commands) {
         this.memory = memory;
         this.commands = commands;
+    }
+
+    /** The content mod these conditions belong to (SF_HasMod / SF_HasAnyMod read its start record). */
+    public Conditions owner(String mod) {
+        this.owner = mod;
+        return this;
+    }
+
+    /** SagaLib 1.3: SF_HasMod (every listed mod counts) and SF_HasAnyMod (one does); null for other names. */
+    public static Boolean modCondition(Memory m, String owner, String name, List<String> args) {
+        if ("SF_HasMod".equals(name)) return !args.isEmpty() && Mods.hasAll(m, owner, args);
+        if ("SF_HasAnyMod".equals(name)) return !args.isEmpty() && Mods.hasAny(m, owner, args);
+        return null;
     }
 
     public boolean eval(String line) { return eval(RuleLine.parseCondition(line)); }
@@ -43,7 +58,10 @@ public final class Conditions {
                 r = Values.compare(v, c.op, rhs);
             }
         } else {
-            Boolean known = QuestLogic.condition(memory, c.name, c.args);
+            Boolean known = modCondition(memory, owner, c.name, c.args);
+            if (known == null) known = Bounties.condition(memory, owner, c.name, c.args);
+            if (known == null) known = Presence.condition(memory, c.name, c.args); // SagaLib 1.3 (task #70)
+            if (known == null) known = QuestLogic.condition(memory, c.name, c.args);
             if (known == null && commands != null) known = commands.eval(c.name, c.args, c.body);
             if (known == null) {
                 SagaLog.warnOnce("cond:" + c.name, "condition \"" + c.raw + "\": no rule command " + c.name + " found; counted as false");

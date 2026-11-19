@@ -1,0 +1,94 @@
+{
+  "name": "SagaLib 1.3 (task #70): a person present only while their market's owner gets on with a faction; owner and relation changes toggle the away flag, the offer is refused while away; SF_FactionRep",
+  "quests": [
+    {
+      "format": 1, "id": "sfr_job", "title": "The loyalist's job", "kind": "quest",
+      "start": { "kind": "contact", "person": "sfr_loyal" },
+      "stages": [ { "id": "go", "title": "Go", "marker": "", "kind": "normal" } ],
+      "variables": []
+    },
+    {
+      "format": 1, "id": "sfr_other", "title": "Someone else's job", "kind": "quest",
+      "start": { "kind": "contact", "person": "sfr_plain" },
+      "stages": [ { "id": "go", "title": "Go", "marker": "", "kind": "normal" } ],
+      "variables": []
+    }
+  ],
+  "people": [
+    { "id": "sfr_loyal", "name": { "first": "Ada", "last": "Loyal" }, "faction": "hegemony",
+      "placement": { "at": "market", "market": "sfr_station", "inCommDirectory": true },
+      "presence": { "faction": "hegemony", "atLeast": "NEUTRAL" } },
+    { "id": "sfr_trader", "name": { "first": "Bo", "last": "Trader" }, "faction": "independent",
+      "placement": { "at": "market", "market": "jangala", "inCommDirectory": true },
+      "presence": { "faction": "tritachyon", "atLeast": "notHostile", "elsewhere": "asharu" } },
+    { "id": "sfr_plain", "name": { "first": "Cy", "last": "Plain" }, "faction": "pirates",
+      "placement": { "at": "market", "market": "sfr_station", "inCommDirectory": true } }
+  ],
+  "phrases": [],
+  "enabled": [],
+  "steps": [
+    { "world": { "places": ["sfr_station", "jangala", "asharu"], "people": ["sfr_loyal", "sfr_trader", "sfr_plain"],
+                 "owners": { "sfr_station": "independent", "jangala": "hegemony", "asharu": "hegemony" },
+                 "factions": ["hegemony", "independent", "pirates", "tritachyon"],
+                 "relations": { "independent|hegemony": "NEUTRAL", "hegemony|tritachyon": "SUSPICIOUS", "pirates|hegemony": "VENGEFUL" } },
+      "note": "an unset away flag counts as present" },
+    { "offer": "sfr_job", "is": true },
+    { "presence": true, "moves": [] },
+    { "expect": { "$global.sagaforge_away_sfr_loyal": "false", "$global.sagaforge_away_sfr_trader": "false" } },
+    { "offer": "sfr_job", "is": true },
+
+    { "world": { "places": ["sfr_station", "jangala", "asharu"], "people": ["sfr_loyal", "sfr_trader", "sfr_plain"],
+                 "owners": { "sfr_station": "pirates", "jangala": "hegemony", "asharu": "hegemony" },
+                 "factions": ["hegemony", "independent", "pirates", "tritachyon"],
+                 "relations": { "independent|hegemony": "NEUTRAL", "hegemony|tritachyon": "SUSPICIOUS", "pirates|hegemony": "VENGEFUL" } },
+      "note": "the station is taken by the pirates, who are Vengeful toward the Hegemony" },
+    { "presence": true, "moves": ["sfr_loyal:leaves:pirates"] },
+    { "expect": { "$global.sagaforge_away_sfr_loyal": "true", "$global.sagaforge_away_sfr_trader": "false" } },
+    { "offer": "sfr_job", "is": false, "away": "sfr_loyal" },
+    { "offer": "sfr_other", "is": true, "note": "a person without a presence rule at the same market stays" },
+    { "check": "$global.sagaforge_away_sfr_loyal", "is": true },
+    { "presence": true, "moves": [], "note": "nothing changed since the last check" },
+
+    { "world": { "places": ["sfr_station", "jangala", "asharu"], "people": ["sfr_loyal", "sfr_trader", "sfr_plain"],
+                 "owners": { "sfr_station": "independent", "jangala": "hegemony", "asharu": "hegemony" },
+                 "factions": ["hegemony", "independent", "pirates", "tritachyon"],
+                 "relations": { "independent|hegemony": "HOSTILE", "hegemony|tritachyon": "HOSTILE", "pirates|hegemony": "VENGEFUL" } },
+      "note": "the independents take the station back, but a war broke out: independents and Tri-Tachyon are hostile to the Hegemony" },
+    { "presence": true, "moves": ["sfr_trader:leaves:hegemony"] },
+    { "expect": { "$global.sagaforge_away_sfr_loyal": "true", "$global.sagaforge_away_sfr_trader": "true" } },
+
+    { "world": { "places": ["sfr_station", "jangala", "asharu"], "people": ["sfr_loyal", "sfr_trader", "sfr_plain"],
+                 "owners": { "sfr_station": "independent", "jangala": "hegemony", "asharu": "hegemony" },
+                 "factions": ["hegemony", "independent", "pirates", "tritachyon"],
+                 "relations": { "independent|hegemony": "NEUTRAL", "hegemony|tritachyon": "INHOSPITABLE", "pirates|hegemony": "VENGEFUL" } },
+      "note": "peace: back to Neutral; Inhospitable isn't hostile" },
+    { "presence": true, "moves": ["sfr_loyal:back:independent", "sfr_trader:back:hegemony"] },
+    { "offer": "sfr_job", "is": true },
+
+    { "world": { "places": ["sfr_station", "asharu"], "people": ["sfr_loyal", "sfr_trader", "sfr_plain"],
+                 "owners": { "sfr_station": "independent", "asharu": "hegemony" },
+                 "factions": ["hegemony", "independent", "pirates", "tritachyon"],
+                 "relations": { "independent|hegemony": "NEUTRAL", "hegemony|tritachyon": "HOSTILE", "pirates|hegemony": "VENGEFUL" } },
+      "note": "a person whose market is gone keeps their flag" },
+    { "presence": true, "moves": [] },
+    { "expect": { "$global.sagaforge_away_sfr_trader": "false" } },
+
+    { "newGame": true, "world": { "places": ["sfr_station", "jangala", "asharu"], "people": ["sfr_loyal", "sfr_trader", "sfr_plain"],
+                 "owners": { "sfr_station": "pirates", "jangala": "hegemony", "asharu": "hegemony" },
+                 "factions": ["hegemony", "independent", "pirates", "tritachyon"],
+                 "relations": { "independent|hegemony": "NEUTRAL", "hegemony|tritachyon": "SUSPICIOUS", "pirates|hegemony": "VENGEFUL" } },
+      "note": "the first check of a save: away from the start (also applied on load)" },
+    { "presence": true, "moves": ["sfr_loyal:leaves:pirates"] },
+
+    { "do": "$faction.id = pirates" },
+    { "check": "SF_FactionRep $faction.id hegemony NEUTRAL", "is": false },
+    { "check": "!SF_FactionRep $faction.id hegemony HOSTILE", "is": true },
+    { "check": "SF_FactionRep pirates hegemony VENGEFUL", "is": true },
+    { "check": "SF_FactionRep hegemony independent NEUTRAL", "is": true, "note": "relations work both ways" },
+    { "check": "SF_FactionRep hegemony tritachyon notHostile", "is": true },
+    { "check": "SF_FactionRep hegemony tritachyon FAVORABLE", "is": false },
+    { "check": "SF_FactionRep independent tritachyon NEUTRAL", "is": true, "note": "a pair with no relation set is Neutral" },
+    { "check": "SF_FactionRep hegemony hegemony COOPERATIVE", "is": true, "note": "a faction with itself" },
+    { "check": "SF_FactionRep nope hegemony VENGEFUL", "is": false, "note": "a faction that doesn't exist: false" }
+  ]
+}

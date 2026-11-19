@@ -9,13 +9,14 @@ same golden cases in `test/golden/*.json` run on both sides, so the two can't dr
 
 | File | Read how | What |
 |---|---|---|
-| `data/config/sagaforge/content.csv` | `Global.getSettings().getMergedSpreadsheetDataForMod("id", path, "lastai_sagalib")`: rows from every enabled mod | `id,type,path,mod`: one row per runtime file. type ∈ `quest`, `people`, `factions`, `system`, `encounter`, `profiles`, `pool` (1.2) |
+| `data/config/sagaforge/content.csv` | `Global.getSettings().getMergedSpreadsheetDataForMod("id", path, "lastai_sagalib")`: rows from every enabled mod | `id,type,path,mod`: one row per runtime file. type ∈ `quest`, `people`, `factions`, `system`, `encounter`, `profiles`, `pool` (1.2), `mods` (1.3), `settings` (1.3, "Mod settings (LunaLib)"). SagaLib 1.3: quest, people (per person), factions, system, encounter, pool, events, progress, scatter and strings files may have `versions` ("Versions by installed mods") |
 | `data/sagaforge/quests/<questId>.json` | `Global.getSettings().loadJSON(path, mod)` | one quest (below) |
 | `data/sagaforge/people/<mod>_people.json` | same | `{format, people: [Person], phrases: [Phrase]}` (`phrases` = the mod-wide phrases) |
-| `data/sagaforge/factions.json` | same | `{format, relations: {factionId: {otherId: -1..1}}, scripted: {factionId: [{op:"remove", path:"knownShips.hulls", value:"colossus"}]}}` |
+| `data/sagaforge/factions.json` | same | `{format, relations: {factionId: {otherId: -1..1}}, scripted: {factionId: [{op:"remove", path:"knownShips.hulls", value:"colossus"}]}}`; SagaLib 1.3: a relation may be `{"value": v, "modsWith": [...]}`, a change may carry mod conditions, ops `hideFromIntelTab`, `showInIntelTab`, `add` and `set` ("Versions by installed mods"), the file may have `versions`, and `nexerelin` lists factions whose relations are left to Nexerelin ("Factions runtime") |
 | `data/sagaforge/systems/<id>.json` | same | a star system (M6; see that section) |
 | `data/sagaforge/encounters/<id>.json` | same | an encounter (M7; see that section) |
 | `data/sagaforge/pools/<id>.json` | same | SagaLib 1.2: a random pool (see "Pools") |
+| `data/sagaforge/mods.json` | same, type `mods` | SagaLib 1.3: the mod's list of other mods (see "Other mods and mod conditions") |
 | `data/sagaforge/dev/test_profiles.json` | same, **only in dev mode** | `{format, profiles: [TestProfile]}` |
 | `data/campaign/person_missions.csv`, `bar_events.csv` | the game itself | rows with `plugin` = `lastai.sagalib.quest.SagaQuest` and `mission id` / `bar event id` = the quest id |
 | `data/campaign/rules.csv` | the game itself | the dialog; it uses the rule commands below |
@@ -43,8 +44,10 @@ path (for example both ship `data/sagaforge/factions.json`): they are different 
   "rewards": [{"id": "done", "credits": 60000, "rep": [{"faction": "vgc_vanguard", "amount": 5}],
                "personRep": [{"person": "vgc_reyes", "amount": 5}], "items": [{"item": "vgc_black_box", "qty": 1}],
                "ships": ["buffalo_Standard"], "xp": 1000, "storyPoints": 1}],
-  "timers": [{"node": "wait1", "trigger": "vgc_lost_convoy_wait1", "days": 7}],
+  "timers": [{"node": "wait1", "trigger": "vgc_lost_convoy_wait1", "days": 7, "stage": "find"}],
   "encounters": [{"node": "ambush", "encounter": "vgc_belt_ambush", "defeated": "vgc_lost_convoy_ambush_defeated", "avoided": "vgc_lost_convoy_ambush_avoided"}],
+  "bountyWaits": [{"node": "w", "bounty": "vgc_b_raid", "stage": "hunt", "succeeded": "vgc_lost_convoy_w_succeeded",
+                   "failed": "", "expired": "vgc_lost_convoy_w_expired", "dismissed": ""}],
   "arrivals": ["vgc_convoy_wreck"],
   "phrases": [Phrase],
   "flags": ["$global.vgc_lost_convoy_catch_asked"]
@@ -53,6 +56,7 @@ path (for example both ship `data/sagaforge/factions.json`): they are different 
 
 - `kind` is `quest` (a vanilla hub mission: journal, markers, time limit) or `dialog` (a file only
   because it has inline phrases; no mission).
+- `bountyWaits` (SagaLib 1.3, optional): Wait nodes on a MagicLib bounty's end, see "MagicLib bounties".
 - `targets` (SagaLib 1.2): random targets, see "Random targets". `[]` or missing: none. A stage
   `marker`, an `arrivals` entry or an `entityFlags` entity may be `$global.<quest>_<var>`: the
   picked id.
@@ -70,6 +74,10 @@ Quest progress lives only in sector memory, so saves survive updates:
 | `$global.<quest>_step` | the current stage id (a string) |
 | `$global.<quest>_<var>` | quest variables (set to `initial` when the mission is created, if unset) |
 | vanilla's `$<quest>_missionCompleted` | set by `setCompletedKey()` on success, as vanilla does |
+| `$global.sagaforge_success_<quest>` / `_fail_<quest>` | SagaLib 1.3: true once the quest ended that way (true/false keys MagicLib's bounty triggers can read; see "MagicLib bounties") |
+| `$global.sagaforge_skipped_<quest>` | SagaLib 1.3: true once SagaLib gave the rewards of a quest the player skipped on Nexerelin's new-game screen (see "Nexerelin quest skip") |
+| `$global.sagaforge_away_<person>` | SagaLib 1.3: true while a person with a `presence` rule is away, false while present (unset until the first check; see "Presence") |
+| `$global.sagaforge_bwait_<quest>_<node>_done` | SagaLib 1.3: the step a Wait on a MagicLib bounty fired at (`*` = once per run); unset while it watches (see "MagicLib bounties") |
 
 The generic mission's vanilla stage is an enum with only `ACTIVE`, `COMPLETED`, `FAILED` and
 `ABANDONED` (PLAN.md §3.2, option A). Designer steps are strings in `$global.<quest>_step`.
@@ -91,6 +99,12 @@ in the loaded JSON. **Never rename or remove a saved field or class after 1.0.**
 | `SF_IsTarget <quest> <var> [person|spawned]` | condition | SagaLib 1.2: the dialog is at the quest's random target: its entity, its market, or (a system target) anything in that system; `person`: talking to its person; `spawned`: at what SF_SpawnAtTarget placed. |
 | `SF_SpawnAtTarget <quest> <var> <entity|derelict> <type> [where]` | script | SagaLib 1.2: vanilla's mission spawning near the target (see "Random targets"). |
 | `SF_RollPool <pool> [object|global]` | both | SagaLib 1.2: pick one entry of a random pool by weight into `$sagaforge_pick` (see "Pools"). As a condition: true when an entry, not `nothing`, was picked. |
+| `SF_HasMod <mod id> [more…]` | condition | SagaLib 1.3: every listed mod **counts**: enabled when this game started and still enabled (see "Other mods and mod conditions"). `!SF_HasMod <id>`: it doesn't count. |
+| `SF_HasAnyMod <mod id> [more…]` | condition | SagaLib 1.3: at least one of them counts. |
+| `SF_StartBounty <bounty>` | script | SagaLib 1.3: the player takes a MagicLib bounty, through the guarded bridge (see "MagicLib bounties"); without MagicLib it does nothing. |
+| `SF_BountyState <bounty> <state> [more…]` | condition | SagaLib 1.3: the MagicLib bounty is `unavailable`, `offered`, `active`, `succeeded`, `failed`, `expired`, `dismissed` or `ended` (see "MagicLib bounties"). |
+| `SF_Achievement <id>` | script | SagaLib 1.3: unlocks a MagicLib achievement through the guarded bridge (see "MagicLib achievements"); without MagicLib it does nothing. |
+| `SF_FactionRep <factionA> <factionB> <level>` | condition | SagaLib 1.3: faction A is at least `<level>` with faction B (`VENGEFUL` … `COOPERATIVE`, or `notHostile` = `INHOSPITABLE` or better). Either faction may be a memory key, e.g. `$faction.id` (the owner of the market the dialog is at). A faction with itself is `COOPERATIVE`; a faction that doesn't exist makes it false (logged once). Vanilla's `RepIsAtWorst` is the player's standing; this one is between two factions (see "Presence"). |
 | `SF_BackToMenu` | script | The end of a conversation branch: clear the options and `FireAll PopulateOptions`; if no rule adds an option (a wreck or other custom entity has no menu) the dialog closes. |
 | `SF_AtStep <quest> <step>` | condition | true if state is `active` and the step is `<step>` |
 | `SF_QuestDone <quest> [success\|fail\|any]` | condition | true if the quest ended that way (default any) |
@@ -153,6 +167,9 @@ does:
 - `contact`: make them a potential contact the vanilla way (`ContactIntel.addPotentialContact`
   style, `Tags.CONTACT_*`, importance), so their quests from `person_missions.csv` are offered.
 - An existing person with that id (from a save) is updated, not duplicated.
+- SagaLib 1.3: `"presence": {"faction": "hegemony", "atLeast": "NEUTRAL", "elsewhere": "vgc_refuge"}`
+  (only with placement `market`): present only while the market's owner gets on with a faction.
+  See "Presence".
 
 ## Factions runtime
 
@@ -160,6 +177,26 @@ On a **new game** only, set the starting relations
 (`Global.getSector().getFaction(a).setRelationship(b, value)`). Scripted changes are applied on
 **every** load: remove the value from the faction's known lists (`FactionAPI.removeKnownShip`,
 `removeKnownWeapon`, …, by path).
+
+SagaLib 1.3 (additive):
+
+- A relation with mod conditions is an object: `"relations": {"vgc_f": {"hegemony": 0.5, "HMI": {"value": -0.5, "modsWith": ["HMI"]}}}`. When its conditions don't hold it is skipped quietly (one info line), so a relation with an optional mod's faction no longer logs "unknown faction".
+- A scripted change may carry `modsWith` / `modsWithout` / `modsAny`.
+- `{"op": "hideFromIntelTab"}` (no `path` or `value`): `FactionAPI.setShowInIntelTab(false)` on every load, for a faction that only matters with an optional mod (usually with `modsWithout`). The `.faction` file's own `showInIntelTab` can't depend on mods.
+- More ops (`showInIntelTab`, `add`, `set` for names, logo, crest, secondary colour and doctrine): see "Versions by installed mods", "Scripted faction changes".
+- **`"nexerelin": ["vgc_f", …]`** (task #63): factions whose starting relations the mod also ships in a
+  Nexerelin faction config, `data/config/exerelinFactionConfig/<id>.json` (listed in its
+  `mod_factions.csv`, with `startRelationships` and `useConfigRelationshipsInNonRandomSector: true`).
+  When the mod `nexerelin` is enabled, SagaLib doesn't set those factions' relations **without mod
+  conditions**: Nexerelin applies them (in the hand-made and the random sector) and randomizes them
+  only when the player picks random relations, unless the config has `noRandomizeRelations`.
+  Mods' ModPlugins run in mod order, so SagaLib's `onNewGameAfterEconomyLoad` runs after Nexerelin's
+  and would otherwise overwrite them. SagaLib first checks that the mod ships the config file
+  (`SettingsAPI.loadText(path, mod)`); if it doesn't, it logs a warning and sets the relations as
+  before. Relations with mod conditions aren't in the config and are set by SagaLib as always (after
+  Nexerelin, never randomized). Without Nexerelin nothing changes. Logged: "left N starting relations
+  of <faction> to Nexerelin (its faction config)". The config itself is data only: SagaLib never reads
+  or changes it.
 
 ## Save reconciliation (on every load)
 
@@ -306,7 +343,8 @@ Log one line per change. Never crash.
   - A timer entry may name the step it waits at: `{"node": "wait1", "trigger": "...", "days": 7,
     "stage": "find"}`. It starts when the active quest is at that step and fires if the quest is
     still there `days` later. Leaving the step first cancels it; coming back starts it again.
-    Saga Forge should write `stage` = the stage set just before the Wait node.
+    Saga Forge writes `stage` = the stage set just before the Wait node (since task #69; before,
+    it wrote none, and the flow also jumped into the timer's rule at once).
   - Without `stage`, it starts at the step the quest is at when SagaLib first sees it active
     (in practice the step set just before the Wait node), runs once per quest run, and is
     cancelled if the step changes first.
@@ -586,12 +624,476 @@ A translation is a mod of its own that ships one CSV; the translated mod is neve
   (and "none") and apply the chosen one.
 - **Dev menu** (a `CampaignInputListener`, re-added on load, default key F9 with Ctrl). It
   lists, applies a profile, jumps a quest to a step, and **reloads** the JSON (quests, people,
-  phrases, profiles) from disk without restarting. Reload only re-reads definitions; built
+  phrases, profiles) from disk without restarting. SagaLib 1.3: **Mods** shows each content mod's
+  list with the start record and what is enabled now, and every item skipped for its mod
+  conditions, with why. **Versions** and **Write sector snapshot**: see "Versions by installed
+  mods". Reload only re-reads definitions; built
   systems and spawned fleets are not rebuilt.
 - Applying a profile writes the quests' state/step/variables, flags, credits, story points,
   commission, reputation, cargo, and moves the player fleet to `startAt` (an entity or market id;
   before 1.2 only at a new game; from the dev menu, the menu then closes). The menu says it
   changes the running save. Test mods use this to take the player to their testing area.
+
+## Other mods and mod conditions (SagaLib 1.3)
+
+The game has no optional dependency (Saga Forge FORMATS.md, "mod_info.json and dependencies"), so a
+content mod lists the other mods it has content for in `data/sagaforge/mods.json` (type `mods` in
+content.csv, one per mod):
+
+```json
+{ "format": 1, "mod": "vgc", "name": "Vanguard Compact", "prefix": "vgc_",
+  "mods": [ { "id": "HMI", "name": "Hazard Mining Incorporated", "use": "optional" },
+            { "id": "crewr", "name": "Crew Replacer", "use": "incompatible", "reason": "both change crew" },
+            { "id": "lw_lazylib", "name": "LazyLib", "use": "required", "minVersion": "3.0" } ] }
+```
+
+`use` is `required` (in `mod_info.json` dependencies too; SagaLib only shows it in the dev menu),
+`optional` or `incompatible`. `mod` must be the mod that ships the file. `prefix` is the mod's id
+prefix: `SF_HasMod` in a rule whose id starts with it reads that mod's start record.
+
+**The start record** (saved): the first time SagaLib sees a content mod in a save (at a new game,
+in `onNewGame` before anything is built; or when the mod is added to a running game; or when an
+update lists a new mod), it records for each of its optional and incompatible mods whether it is
+enabled: `$global.sagaforge_mod_<owner>_<mod>` = `"on"` | `"off"`. It never changes afterwards.
+
+**A mod counts** for a content mod when it is enabled now **and** its record isn't `"off"`. A mod
+the record doesn't know (not listed as optional or incompatible, e.g. a required one) counts when
+it is enabled. Without an owner (a condition in a phrase case or a pool entry), a mod counts when
+it is enabled and no list that records it says `"off"`. So a mod added to a running game changes
+nothing, and a removed one stops what depends on it (what already exists stays; SagaLib doesn't
+clean up).
+
+**Mod conditions** on content (all additive, all optional):
+
+| Key | Meaning |
+|---|---|
+| `modsWith` | every one of these mods counts |
+| `modsWithout` | none of these mods counts |
+| `modsAny` | a list of lists: in each, at least one mod counts |
+
+They are read on quests (never offered or started otherwise: `SagaQuest.create` and `SF_Start`
+return false), people (not created or updated; also not when a market's `people` lists them),
+systems and each of their entities (not built: for an existing system, its additions), encounters
+(not spawned, also from encounter pools), roaming fleets, event schedulers, progress events,
+pools (`SF_RollPool` picks `nothing`; an encounter pool isn't rolled), scatter, relations and
+scripted faction changes. A skipped item logs one info line per game: `skipped quest vgc_x of vgc:
+needs HMI (not enabled when this game started)`. Single world events and pool entries use condition
+lines (`SF_HasMod` …) in their `conditions`, and dialog uses the rule commands.
+
+**Notices.** On every load, after the record, SagaLib compares it with the enabled mods and logs
+each difference as a warning (`[SagaLib] mods: …`). A difference not told in this save before is
+shown once in a small dialog when the campaign is on screen; `$global.sagaforge_modtold_<owner>_<mod>`
+remembers what was told (`added`, `removed`, `incompatible`; unset again when it no longer
+applies, so a later change is told again):
+
+- an incompatible mod enabled: "<mod>: the author marks <other> as possibly conflicting: <reason>"
+- an optional mod added since the start: "<mod> was set up for the mods this game started with.
+  <other> was added since, so <mod> plays on without its <other> content. Start a new game to get it."
+- an optional mod removed since the start: "<other> was removed after this game started. The author
+  of <mod> didn't plan for that, so things may break."
+
+The shared golden case `test/golden/mods.json` (also run by Saga Forge's Play mode) covers the
+record, `SF_HasMod` / `SF_HasAnyMod`, the gates and the notices. Its extra keys: `modLists`
+(mods.json contents), `enabled` (the enabled mods), and the steps `{"enabled": [...]}`,
+`{"record": true, "notices": ["owner:mod:what", …]}` (the fresh notices) and
+`{"gate": {...}, "owner": "<mod>", "is": true|false}` (whether the conditions hold); a `check`
+step may name its `owner`.
+
+## Versions by installed mods (SagaLib 1.3)
+
+(Saga Forge PLAN.md §10.6.) One item can have **versions** for combinations of the optional
+mods: the same id, with some fields changed when those mods count. SagaLib picks each item's
+version **once per save**, from the start record (above), and keeps it.
+
+**Where.** A `versions` list may be on: a quest file, each person of a people file, a system
+file, an encounter file, a pool file, an event scheduler file, a progress event file, a scatter
+file and a `factions.json` file (the whole file: starting relations and scripted changes).
+
+```json
+{ "id": "sfa_reyes", "name": { "first": "Ilse", "last": "Reyes" }, "portrait": "graphics/a.png",
+  "versions": [
+    { "id": "mod1", "modsWith": ["sfj"], "set": { "placement.market": "sfj_port" } },
+    { "id": "mod2", "modsWith": ["sfb"], "set": { "name.last": "Okafor", "portrait": "graphics/b.png" } }
+  ] }
+```
+
+- A version holds when its `modsWith` / `modsWithout` / `modsAny` hold (the same keys and meaning
+  as mod conditions). `id` is a label (the dev menu, translation keys); it should be unique in the
+  list. `set` maps a **path** to a value.
+- **Paths**: segments joined by `.`; a segment is an object key, or `key[x]`: the element of the
+  array `key` whose `"id"` (else, for an element without an id, `"token"`) is `x` (the same as
+  translation keys; an element with neither isn't reachable). Setting a path creates missing
+  objects on the way. A value `null` **removes** the key (or the array element); removing
+  something that isn't there does nothing. A path that can't be followed (not an object, no
+  element with that id) is an error for that path only (logged once, at load), and the rest of
+  the version still applies. The path `id` can't be set. The paths of one version are applied in
+  sorted order (Java `String` order, so a parent before its children): the game's JSON keeps no
+  key order.
+- **Resolution** for a set of mods that count: take the versions that hold, sort them by
+  specificity (`modsWith` + `modsWithout` + `modsAny` entries; stable, so equal ones keep their
+  order in the file), and apply each one's `set` in that order to a copy of the item without
+  `versions`. So the most specific version wins, field by field, and a field no version sets
+  keeps the base value.
+- **Conflict**: two versions that hold with the same specificity set the same path to different
+  values, and no more specific version that holds sets it. The later one in the file wins, and
+  SagaLib logs one warning per item and path (at load, for any combination). (Saga Forge asks
+  for the value in the combined version, so its exports have none.)
+- **Mods an item mentions** = every mod named by its versions. At most 6 (an item with more
+  logs an error and uses its base). At load SagaLib parses every combination (at most 64) as a
+  normal item. A problem that only a combination has is logged once, ending in
+  `(in version <key>)`; a combination that can't be read at all uses the base.
+- **Base** = the item resolved with no mod counting, so a `modsWithout` version holds in it.
+- **Choosing** (new game: in `onNewGame`, right after the start record and before systems are
+  built; every load: right after the record): for each item not chosen yet in this save, its
+  version = the mods it mentions that count for its owner (`Mods.counts`, the start record), stored
+  as `$global.sagaforge_ver_<kind>_<id>` = `"base"` or the mod ids sorted (Java `String`
+  order) and joined with `+` (`"sfb+sfj"`). `<kind>` ∈ `quest`, `person`, `system`, `encounter`,
+  `pool`, `events`, `progress`, `scatter`, `factions` (`<id>` = the owner mod's id). **A stored
+  choice never changes**: a mod added or removed later, or an update that adds versions for
+  another mod, doesn't switch it (a stored mod the item no longer mentions is dropped when the
+  version is used; the stored key itself isn't rewritten). An item first seen in a running save
+  (added by an update) is chosen from the same record. The dev menu's reload chooses and applies
+  again too.
+- For **quests** SagaLib also sets `$global.sfv_<questId>_<mod>` = `true` for each mod of the
+  chosen version (characters of a mod id other than letters, digits and `_` become `_`). The
+  exported dialog tests these: a node a version changes gets an extra rule with these conditions,
+  which beats the base rule by having more conditions.
+- **Using it**: after choosing, every definition SagaLib uses (quests, people and their phrases,
+  systems, encounters, pools, events, progress, scatter, factions) is the chosen version, for the
+  whole session of that save. Another save loaded later is chosen and applied again (every item
+  is put back from its parsed versions, so nothing carries over). Progress events already in the
+  save take their chosen definition right after.
+
+**Item names, descriptions, icons and prices** (`data/sagaforge/text.json`) follow the **installed**
+mods instead: they are set at application load, before any save. The file may have a `versions`
+list over its own paths: `items.<id>.name`, `items.<id>.desc`, `items.<id>.icon`,
+`items.<id>.basePrice` (a number), `descriptions.<id>|<TYPE>.text1` / `text2` / `text3`. It is
+resolved with the mods **enabled now** and applied like a translation (`setName`, `setDesc`,
+`setIconName`, `setBasePrice` on the commodity or special item spec; `Description.setText1…3`).
+Only values that differ from the file's base are set; an icon is loaded first. `desc` is only
+for special items (a commodity's text is `descriptions.<id>|RESOURCE.text1`). Another path, or a
+`basePrice` that isn't a number, is an error at load and never applied. A translation of the mod
+translates the versions' texts too (their keys are `<id>/versions[<version id>].set.<path>`).
+
+**Scripted faction changes** (SagaLib 1.3 additions, applied on every load like the others):
+
+| Change | What SagaLib calls |
+|---|---|
+| `{"op": "set", "path": "displayName", "value": "…"}` | `setDisplayNameOverride` (also `displayNameWithArticle` → `setDisplayNameWithArticleOverride`) |
+| `{"op": "set", "path": "logo" \| "crest", "value": "<sprite path>"}` | `setFactionLogoOverride` / `setFactionCrestOverride` (the sprite is loaded first) |
+| `{"op": "set", "path": "secondaryColor", "value": "r,g,b,a"}` | `setSecondaryColorOverride` (0–255 each; alpha optional, default 255) |
+| `{"op": "set", "path": "doctrine.<field>", "value": "3"}` | the faction's `FactionDoctrineAPI` setter: `warships`, `carriers`, `phaseShips`, `officerQuality`, `shipQuality` (0–5), `numShips`, `shipSize`, `aggression` (1–5), all whole numbers; `combatFreighterProbability` (0–1) |
+| `{"op": "add", "path": "knownShips.hulls", "value": "<hull>"}` | `addKnownShip(hull, false)` if not known; `knownWeapons.weapons`, `knownFighters.fighters` likewise |
+| `{"op": "add" \| "remove", "path": "illegalCommodities", "value": "<commodity>"}` | `makeCommodityIllegal` (if not illegal) / `makeCommodityLegal` |
+| `{"op": "showInIntelTab"}` | `setShowInIntelTab(true)` (the opposite of `hideFromIntelTab`) |
+
+There is no `displayNameLong`: the game (0.98a) has no setter for it, so that path is an error.
+Every op, path and value is checked at load; a bad one is an error with its JSON path and the
+change is skipped. Since 1.3 this includes `remove` with a list SagaLib can't change (before, it
+was an error on every load).
+
+**Sector snapshot** (dev mode only): the dev menu's **Write sector snapshot** writes
+`Global.getSettings().writeTextFileToCommon("sagaforge_snapshot.json", …)` (the game adds `.data`
+to the file name in `saves/common/`). Saga Forge imports it as a source "seen in game", so places,
+markets and people that only exist in a mod's code become pickable and checked:
+
+```json
+{ "format": 1, "sagalib": "1.3.0", "gameVersion": "0.98a-RC8", "day": "c.206.3.15",
+  "mods": [ { "id": "sfj", "name": "Saga Forge 64 Java stand-in", "version": "1.0.0" } ],
+  "systems": [ { "id": "sfj_haven", "name": "Haven", "x": -4000, "y": 2500 } ],
+  "places":  [ { "id": "sfj_port", "name": "Haven Port", "system": "sfj_haven", "kind": "station", "type": "station_side00", "faction": "independent", "market": "sfj_port_market" } ],
+  "markets": [ { "id": "sfj_port_market", "entity": "sfj_port", "name": "Haven Port", "faction": "independent", "size": 4, "system": "sfj_haven" } ],
+  "people":  [ { "id": "sfj_harbor", "first": "Mara", "last": "Quell", "faction": "independent", "market": "sfj_port_market", "post": "portmaster", "rank": "citizen", "portrait": "graphics/portraits/portrait_mercenary02.png" } ] }
+```
+
+Places are the systems' entities that have an id and aren't fleets (planets, stars, stations,
+custom entities, jump points; asteroids, terrain and rings are left out). People are everyone in
+`ImportantPeopleAPI` plus each market's people list, by id. `kind` is `star`, `planet`,
+`station` (a custom entity tagged `station`), `jumpPoint` or `custom`. `type` is the planet type
+or the custom entity type (none for jump points). A place's `market` is set only for a real
+market (not a planet's condition-only market). A person's `market` is the first market that
+lists them, else `PersonAPI.getMarket()`. Systems' `x`/`y` are their hyperspace location,
+rounded. Key order in the file isn't kept (the game's JSON).
+
+**Dev menu**: **Versions** lists every versioned item with its kind, owner, the mods it
+mentions, the chosen version (or "not chosen yet") and the version in use, plus each text.json
+with versions and the version used for the mods enabled at startup.
+
+The shared golden case `test/golden/versions.json` covers resolution (2 optional mods, all 4
+combinations, inheritance, a conflict), choosing at new game, and that a mod added later changes
+nothing. Its extra keys: `versioned` (`[{ "kind", "owner", "item" }]`: items in their file
+format with `versions`; a `factions` item is the whole file) and the steps `{"newGame": true}`
+(an empty save), `{"choose": true}` (choose every item not chosen yet, after a `record`),
+`{"resolve": "<kind>:<id>", "on": [...], "is": {…}, "conflicts": ["<path>", …]}` (the item
+resolved for those mods, without `versions`, and its conflicting paths, sorted) and
+`{"chosen": "<kind>:<id>", "is": {…}}` (the item as the save uses it).
+
+## Places a quest needs, markets changing owner (SagaLib 1.3, task #61)
+
+No bridge: Nexerelin is never loaded or named in code. Everything below works the same without it
+(owners then change only through other events and mods). Nexerelin's random sector is not supported
+yet (on hold, its own task).
+
+**Places a quest needs.** A quest is never offered or started (`SagaQuest.create` and `SF_Start`
+return false, as vanilla's missions do when their search finds nothing) while one of these doesn't
+exist: its contact (`start.person` of a `contact` or `bar` start; an important person), a place
+named by a `$id == <id>` line of `start.conditions`, a stage `marker`, or an `arrivals` entry (an
+entity, a market or a star system). Random targets (`$global.…` keys) and the mod's own objects
+that appear during a quest (`appears`) are left out. It logs once per game: `skipped quest vgc_x:
+needs place jangala, which doesn't exist in this game`. So a quest can't break halfway when a mod it
+names is gone, or a place it needs was removed.
+
+**Markets changing owner.** A quest may say what happens when one of its markets changes owner
+(an invasion, a rebellion, a sale, any mod):
+
+```json
+"ownerChange": { "do": "stage", "stage": "lost", "trigger": "vgc_q_ownerChanged",
+                 "markets": ["jangala", "$global.vgc_q_target"] }
+```
+
+- `do`: `keep` (keeps going), `fail` (the quest fails) or `stage` (the quest moves to `stage`, which
+  must be one of its stages; a success or fail stage ends it). `trigger` (optional, with `stage`):
+  fired afterwards (queued until no dialog is open, like a timer), so the rules can run what follows.
+- `markets`: entity or market ids, or a random target's key (its picked id is read). When the quest
+  starts, SagaLib remembers each one's owner, plus the owner of the mission giver's market:
+  `$global.sagaforge_owners_<quest>` = `"jangala=hegemony;vgc_station=independent"`. A target picked
+  later is remembered the first time it is seen.
+- Once a day (the runtime script), for every active quest with `ownerChange`: the first market
+  whose faction differs from the remembered one sets `$global.<quest>_ownerChanged` (the market id)
+  and `$global.<quest>_newOwner` (the faction id), the new owner is remembered, and `do` happens.
+  A market that no longer exists is left as remembered. Every `do` sets the two keys, so dialog and
+  a Branch can react even with `keep`.
+
+**Protection from invasion.** A market of a system file may say `"protectFromInvasion": true`: SagaLib
+sets `$nex_uninvadable` = true in its memory when it builds it and on every load (it never unsets
+it). Nexerelin's `NexUtilsMarket.canBeInvaded` is false while it is true, for every invasion, the
+player's too. Without Nexerelin it does nothing.
+
+**Dev menu › Change a market's owner**: the markets active quests watch (with their remembered
+owners) and the content mods' own markets; pick one, then a faction. It sets the market's and its
+entities' faction (without Nexerelin's side effects: no fleets, people or reputation) and checks
+the quests at once instead of waiting a day.
+
+Golden case `test/golden/places.json` (also run by Saga Forge's Play mode). Its steps:
+`{"world": {"places": [...], "people": [...], "owners": {market: faction}}}` (the sector from then
+on; without a world step everything exists), `{"needs": "<quest>", "is": {"places": [...], "people":
+[...]}}`, `{"offer": "<quest>", "is": true|false, "missing": "place x"}` (the mod and sector gate,
+not active, nothing missing), and `{"day": true, "changes": ["<quest>:<market>-><owner>:<do>[:<stage>:<trigger>]"]}`.
+
+## Presence: people present only while their market's owner gets on with a faction (SagaLib 1.3, task #70)
+
+A person placed at a market may be loyal to a faction, for example a Hegemony loyalist at a
+station who leaves when the station is held by someone worse than Neutral toward the Hegemony:
+
+```json
+"presence": { "faction": "hegemony", "atLeast": "NEUTRAL", "elsewhere": "vgc_refuge" }
+```
+
+- `faction`: the faction they're loyal to (default: their own `faction`). `atLeast`: a RepLevel name
+  (`VENGEFUL`, `HOSTILE`, `INHOSPITABLE`, `SUSPICIOUS`, `NEUTRAL`, `FAVORABLE`, `WELCOMING`,
+  `FRIENDLY`, `COOPERATIVE`; default `NEUTRAL`) or `notHostile` (`INHOSPITABLE` or better, the
+  opposite of `FactionAPI.isHostileTo`). `elsewhere` (optional): a market they go to while away.
+- They are present while the owner of their market (`MarketAPI.getFactionId`) is at least
+  `atLeast` with `faction` (`FactionAPI.getRelationshipLevel`). A faction with itself counts as
+  `COOPERATIVE`. So both a new owner and a change of relations count: a war breaking out (a
+  Nexerelin war, a vanilla event, a mod) makes them leave, peace brings them back.
+- Checked once a day (the runtime script, with "Markets changing owner"), on every load and when
+  the dev menu changes an owner or a relation. It sets `$global.sagaforge_away_<person>` to true
+  or false. A person whose market doesn't exist (any more) keeps their flag. Each leave and return
+  is logged: `person vgc_x leaves vgc_station: its owner pirates is below NEUTRAL with hegemony`.
+- **Away** means: their entry in the market's comm directory is hidden
+  (`CommDirectoryEntryAPI.setHidden(true)`; they stay at the market and in the important people,
+  so saves are safe and it is reversible), quests with them as contact (`contact` or `bar` start
+  with that `person`) are not offered (`SagaQuest.create` returns false, logged once per game:
+  `skipped quest vgc_q: its contact vgc_x is away`), and dialog can test the flag. With
+  `elsewhere`, they are listed in that market's comm directory while away (only a comm-directory
+  entry: their own market stays their home), but their quests still aren't offered. When a contact
+  leaves, their mission hub is replaced by a fresh `BaseMissionHub` (vanilla keeps offers it already
+  created until its next update), so an offer seen before they left isn't shown elsewhere.
+- An active quest isn't touched when its contact leaves. Use "Markets changing owner" to fail it or
+  move it to a stage, or test the flag in its dialog.
+- A `presence` with an unknown level, or on a person not placed at a market, is an error and ignored.
+
+**Dev menu**: "Change a market's owner" also lists the markets of people with a presence rule and
+checks presence at once. "War or peace" (shown when a content mod has a presence rule) sets the
+relation between such a person's market owner and their faction to Hostile (-0.6) or Neutral (0).
+
+Golden case `test/golden/presence.json` (also run by Saga Forge's Play mode). Besides the steps of
+`places.json`, it has top-level `"people"` (in this file's format), a world may give `"factions"`
+(the ones that exist; others make `SF_FactionRep` false) and `"relations": {"a|b": "LEVEL"}` (both
+ways; unset = `NEUTRAL`), `{"presence": true, "moves": ["<person>:leaves|back:<owner>"]}` runs the
+check, and `"offer"` steps may say `"away": "<person>"`.
+
+## MagicLib bounties (SagaLib 1.3, task #59)
+
+A quest can start a MagicLib bounty and test its state. MagicLib is never a dependency of SagaLib:
+the bridge (`src-optional/magiclib`, compiled against MagicLib 1.5.6's jar into the same
+`jars/SagaLib.jar`) is loaded by class name only when MagicLib is enabled (`game/MagicBounties`),
+and nothing SagaLib always loads names a MagicLib class. Without MagicLib every bounty is
+`unavailable` and `SF_StartBounty` does nothing but log why. A content mod that uses these
+commands lists MagicLib in its `mods.json` (optional by default; Saga Forge adds it only then).
+
+| Command | Use | Effect |
+|---|---|---|
+| `SF_StartBounty <bounty>` | script | The player takes the bounty, as if accepted on MagicLib's board: MagicLib creates it if its board hasn't yet (`createActiveBounty`: the place is picked and the fleet spawned), then `acceptBounty` with the scaled credit reward, `job_reputation_reward` and `job_forFaction`; the dialog gets MagicLib's own "Accepted job: <name>" line (`mb_accepted`). Only when the bounty is `offered`; a bounty already taken or ended stays as it is. |
+| `SF_BountyState <bounty> <state> [more states…]` | condition | The bounty is in one of these states (below). Negate with `!`. |
+
+**States**, read from the memory keys MagicLib itself sets (the bounty's `job_memKey`, `$<id>` by
+default, is `$global.<id>` in rules): `unavailable` (MagicLib doesn't count for the content mod,
+the bridge is missing, or MagicLib doesn't have the bounty: not in any enabled mod's file, invalid,
+or its `required_mods_id` are missing), `offered` (MagicLib has it and nobody took it; whether the
+board lists it right now depends on where the player is), `active` (the key is false: accepted),
+`succeeded` (`_succeeded`), `failed` (`_failed`: the flagship was salvaged), `expired`
+(`_expired`: its time ran out, or it ended without the player), `dismissed` (the key is true
+without an outcome key), and the word `ended` = any of the last four.
+
+MagicLib "counts" as in "Other mods and mod conditions": enabled when the game started (the start
+record of the content mod whose prefix the rule id has) and still enabled. A bounty already in
+the save's memory keeps its state either way.
+
+**Quest-ended keys.** When a quest ends, SagaLib also sets `$global.sagaforge_success_<quest>` or
+`$global.sagaforge_fail_<quest>` to true (it stays true when a repeatable quest runs again; a
+quest that ended before 1.3 gets it on the next load). These are true/false keys in the sector's
+memory, so MagicLib's `trigger_memKeys_*` can read them as `$sagaforge_success_<quest>`.
+
+Golden case `test/golden/bounties.json`: its `bounties` key says what MagicLib knows
+(`{"known": [ids], "memKeys": {id: key}}`), `enabled` lists `MagicLib` or not, and
+`SF_StartBounty` in a `do` step stands for the bridge's accept (MagicLib sets the key false).
+
+**Waiting for a bounty's end** (quest `bountyWaits`, Saga Forge task #69). A Wait node that goes on
+by itself when the bounty ends, instead of a later dialog that tests its state. Each entry:
+`node`, `bounty` (any mod's bounty id), `stage` (the step it waits at; Saga Forge writes the Stage
+before the node) and one trigger per end state: `succeeded`, `failed`, `expired`, `dismissed`
+(`""` = that end fires nothing, the quest stays there). The campaign script checks it four times
+a day, with the same state as `SF_BountyState` (MagicLib's memory keys; no MagicLib class):
+
+- While the active quest is at `stage` and the bounty has ended, it fires that end's trigger once
+  through the trigger queue (`$global.sagaforge_pending`), so it opens its own dialog on the
+  player's fleet when no other dialog is open, after MagicLib's own messages, like an encounter
+  outcome. A bounty that ended **before** the quest got to the step fires as soon as it does.
+- It records the step it fired at in `$global.sagaforge_bwait_<quest>_<node>_done`. Leaving the
+  step and coming back watches again. Without `stage` it watches the whole run and fires once.
+- A quest that isn't active forgets its waits. Without MagicLib (or when it doesn't count for the
+  content mod) every bounty is `unavailable`, so nothing fires and the quest waits.
+- `dismissed` comes only from MagicLib's old bar board (switched off in MagicLib 1.5.6).
+- Not used: MagicLib's `job_conclusion_script` (one trigger per bounty, only for a mod's own
+  bounties, fired in whatever dialog is open, and missed when the quest isn't there yet).
+
+Golden case `test/golden/bountywait.json`: a `watch` step runs this check for every quest and
+compares the triggers with `fired`.
+
+## Mod settings (LunaLib) (SagaLib 1.3, task #62)
+
+A content mod can have a settings page in LunaLib's menu. Its `data/config/LunaSettings.csv` is
+LunaLib's own format (columns `fieldID`, `fieldName`, `fieldType`, `defaultValue`,
+`secondaryValue`, `fieldDescription`, `minValue`, `maxValue`, `tab`), and content.csv lists it:
+
+```
+<modId>_settings,settings,data/config/LunaSettings.csv,<modId>
+```
+
+SagaLib reads the file itself (`Global.getSettings().loadCSV(path, mod)`, no LunaLib needed; a
+listed file that is missing is an error). Every **value field** becomes **`$global.<fieldID>`**,
+set on every game load (new games too), right after the start record and before anything reads
+quests:
+
+| `fieldType` | Memory value | Notes |
+|---|---|---|
+| `Boolean` | Boolean | `true` / `false`, any case |
+| `Int` | Float (a whole number) | `1.5` isn't an Int |
+| `Double` | Float | |
+| `Radio` | String | `secondaryValue` = the choices, comma separated; the player's value must be one of them |
+| `String` | String | may be empty |
+| `Header`, `Text` | none | layout only, skipped silently |
+| `Keycode`, `Color` | none | skipped with a warning (Saga Forge doesn't make them) |
+
+Rows without a `fieldID` are skipped (as LunaLib does). An unknown type is a warning; a default
+that doesn't read as its type is an error and the field is skipped. A field id used twice (in one
+mod or across mods) is a warning: the first one wins. `minValue` / `maxValue` are LunaLib's menu
+limits; SagaLib doesn't clamp.
+
+**Values.** Without LunaLib (or with a SagaLib built without the bridge) every field gets its
+default. With LunaLib enabled, the optional bridge (`src-optional/lunalib`, compiled against
+LunaLib 2.0.5's jar, loaded by class name only when `lunalib` is enabled: `game/ModSettings`) reads
+the player's value with `LunaSettings.getBoolean` / `getInt` / `getDouble` / `getString` (Radio and
+String) and uses it when it reads as the field's type, else the default. Every apply sets every
+field again, so a value LunaLib no longer has goes back to the default. A `LunaSettingsListener`
+(registered once per game start) applies a mod's settings at once when the player saves them in
+LunaLib's menu during a campaign, and logs what changed; saved from the main menu, they apply on
+the next load. **LunaLib's values are shared by every save** (they live in `saves/common`). SagaLib
+saves nothing about settings: the `$global` keys are ordinary memory, written again on every load.
+Log: one line per content mod, e.g. `settings of sst_mod: 4 values (LunaLib)` or
+`(defaults; LunaLib isn't enabled)`. Dev menu › Mod settings lists each value now and where it came
+from.
+
+Settings work as conditions everywhere (`$global.sst_enable`, `$global.sst_difficulty == Hard`,
+`$global.sst_bonus >= 100`): quest `requires`, Branch cases, phrases.
+
+**Scaling by a setting.** A reward's **`creditsScale`** and an encounter's **`fleet.sizeScale`**:
+
+```json
+{ "setting": "<fieldID>", "per": 100, "factors": { "Easy": 0.5, "Normal": 1, "Hard": 2 } }
+```
+
+`per` is optional (default 1; 0 is replaced by 1 with a warning), `factors` optional. The factor is
+read when the reward is given / the fleet is built, from `$global.<setting>`: unset = 1. With
+`factors`: the value's text (Boolean `true`/`false`, a number without `.0`, a String as is) →
+its factor, not listed = 1. Without: a number (or a String that reads as one) divided by `per`,
+anything else 1. NaN or infinite = 1; then clamped to 0..100. Credits = `round(credits × factor)`
+(half up). Fleet points (`size: fp` only; explicit and named fleets are unchanged) =
+`points × factor`, but at least 1 when the points are above 0; a scaled spawn logs one info line.
+
+Golden case `test/golden/settings.json`: top-level `settings` (`{"mod", "rows"}`: the CSV rows as
+loadCSV gives them) and `encounters` (encounter files), and steps `{"settings": {fieldID: "value
+text"}}` (an apply with these player values; `{}` = no LunaLib), `{"credits": [quest, reward],
+"is": n}`, `{"fleetPoints": encounter, "is": n}` and `{"unset": [keys]}`.
+
+## MagicLib achievements (SagaLib 1.3, task #65)
+
+A content mod's achievements are rows of its own `data/config/magic_achievements.csv`, MagicLib's
+format (`id,name,description,tooltip,script,image,spoilerLevel,rarity`; `script` =
+`org.magiclib.achievements.MagicAchievement`, the generic class for achievements code completes).
+SagaLib doesn't read the file; MagicLib does, for every enabled mod.
+
+| Command | Use | Effect |
+|---|---|---|
+| `SF_Achievement <id>` | script | Unlocks the achievement for the player (`MagicAchievement.completeAchievement(player, textPanel)` + `saveChanges()`), with MagicLib's notice in the dialog. Already unlocked: nothing changes. |
+
+Through the MagicLib bridge (`src-optional/magiclib`, `MagicAchievementsBridge`, loaded by class name
+by `game/Achievements` only when MagicLib is enabled). Without MagicLib, with its achievements turned
+off in MagicLib's settings, or for an id MagicLib doesn't have, it does nothing and logs why once
+per id. MagicLib keeps achievements in the game's common data (`magic_achievements.json`), not in a
+save: one unlocked stays unlocked in every playthrough, so unlike the other commands it doesn't
+depend on the start record.
+
+## Nexerelin quest skip (SagaLib 1.3, task #65)
+
+Nexerelin's new-game "skip quests" screen lists quest chains from every mod's
+`data/config/exerelin/questSkip.json` (merged JSON; Saga Forge FORMATS.md, "Quest skip"). A content
+mod's chains name **`lastai.sagalib.bridge.nexerelin.SagaQuestSkipPlugin`** as their `plugin`
+(`src-optional/nexerelin`, compiled against Nexerelin 0.12.2d's jar into `jars/SagaLib.jar`). Only
+Nexerelin instantiates it, by that name, so SagaLib never loads anything of Nexerelin's itself.
+
+- Each quest entry's `sectorMemFlags` (and `playerMemFlags`) hold the chosen ending's memory, as
+  this file defines it: `$<quest>_state`, `$<quest>_step`, vanilla's `$<quest>_missionCompleted`,
+  `$sagaforge_success_<quest>` / `_fail_`, the variables and the keys set on the way (sector memory
+  is `$global.` in rules). **Nexerelin applies them only through a plugin** (its `applyMemKeys`, in
+  its `onNewGameAfterEconomyLoad`): the plugin's base class applies every skipped quest of the chain.
+- After the time pass (`onNewGameAfterTimePass`), the plugin calls `game.QuestSkips.skipped(id)` for
+  each skipped quest: SagaLib gives the quest's `skip.rewards` (as `SF_Reward` does, without a
+  dialog), shows `skip.unhide` people in their market's comm directory (one without an entry is only
+  logged), and sets **`$global.sagaforge_skipped_<quest>`** to true. That key makes it happen once;
+  it isn't one of the flags Nexerelin sets (it would come first and stop the rewards).
+
+The quest JSON's optional **`skip`** section (only for a quest in a chain):
+
+```json
+"skip": {"rewards": [{"id": "pay", "credits": 5000}, {"id": "skip_won", "xp": 500}], "unhide": ["vgc_reyes"]}
+```
+
+`rewards` are Reward objects (as in `rewards`, `creditsScale` included); Saga Forge copies those on
+the way to the chosen ending and adds one for the direct credits, reputation, items, XP and story
+points there. Missing or empty: nothing is given.
 
 ## Logging
 

@@ -35,6 +35,7 @@ public final class RoamingFleets {
         if (rm == null) return;
         for (EncounterDef e : Saga.content().encounters.values()) {
             if (!"roaming".equals(e.when)) continue;
+            if (!lastai.sagalib.core.Mods.allowed(mem, e.gate, "roaming fleet", e.id)) continue; // SagaLib 1.3
             int onTheWay = rm.getNumRoutesFor(source(e.id));
             if (!RoamLogic.due(mem, e.id, now, e.days, onTheWay, e.max, RANDOM)) continue;
             try { send(e, rm); } catch (Throwable t) { SagaLog.errorOnce("roam:" + e.id, "roaming fleet " + e.id + " couldn't be sent", t); }

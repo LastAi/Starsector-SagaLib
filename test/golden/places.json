@@ -1,0 +1,67 @@
+{
+  "name": "SagaLib 1.3 (task #61): refusing an offer when a place or person is missing, and markets changing owner (keep, fail, go to a stage)",
+  "quests": [
+    {
+      "format": 1, "id": "sfp_contact", "title": "Contact at Jangala", "kind": "quest",
+      "start": { "kind": "contact", "person": "sfp_reyes" },
+      "stages": [ { "id": "go", "title": "Go", "marker": "jangala", "kind": "normal" } ],
+      "variables": [], "arrivals": ["jangala"]
+    },
+    {
+      "format": 1, "id": "sfp_option", "title": "Option at Asharu", "kind": "quest",
+      "start": { "kind": "option", "conditions": ["$id == asharu", "$global.sfp_open"] },
+      "stages": [ { "id": "go", "title": "Go", "marker": "$global.sfp_option_t", "kind": "normal" } ],
+      "variables": []
+    },
+    {
+      "format": 1, "id": "sfp_keep", "title": "Keeps going", "kind": "quest",
+      "start": { "kind": "manual" }, "stages": [ { "id": "go", "title": "Go", "marker": "jangala", "kind": "normal" } ], "variables": [],
+      "ownerChange": { "do": "keep", "markets": ["jangala"] }
+    },
+    {
+      "format": 1, "id": "sfp_fail", "title": "Fails", "kind": "quest",
+      "start": { "kind": "manual" }, "stages": [ { "id": "go", "title": "Go", "marker": "$global.sfp_fail_t", "kind": "normal" } ], "variables": [],
+      "ownerChange": { "do": "fail", "markets": ["jangala", "$global.sfp_fail_t"] }
+    },
+    {
+      "format": 1, "id": "sfp_stage", "title": "Goes to a stage", "kind": "quest",
+      "start": { "kind": "manual" },
+      "stages": [ { "id": "go", "title": "Go", "marker": "sfp_station", "kind": "normal" }, { "id": "lost", "title": "Lost", "marker": "", "kind": "normal" } ],
+      "variables": [],
+      "ownerChange": { "do": "stage", "stage": "lost", "trigger": "sfp_stage_ownerChanged", "markets": ["sfp_station"] }
+    }
+  ],
+  "phrases": [],
+  "enabled": [],
+  "steps": [
+    { "world": { "places": ["jangala", "asharu", "corvus", "sfp_station"], "people": ["sfp_reyes"], "owners": { "jangala": "hegemony", "sfp_station": "independent", "sfp_target": "tritachyon" } } },
+    { "needs": "sfp_contact", "is": { "places": ["jangala"], "people": ["sfp_reyes"] } },
+    { "needs": "sfp_option", "is": { "places": ["asharu"], "people": [] } },
+    { "offer": "sfp_contact", "is": true },
+    { "offer": "sfp_option", "is": true },
+
+    { "world": { "places": ["sfp_station", "corvus"], "people": [], "owners": { "sfp_station": "independent" } }, "note": "a sector without Jangala, Asharu or Reyes (a removed mod, a deleted place)" },
+    { "offer": "sfp_contact", "is": false, "missing": "person sfp_reyes" },
+    { "offer": "sfp_option", "is": false, "missing": "place asharu" },
+
+    { "world": { "places": ["jangala", "asharu", "corvus", "sfp_station", "sfp_target"], "people": ["sfp_reyes"], "owners": { "jangala": "hegemony", "sfp_station": "independent", "sfp_target": "tritachyon" } } },
+    { "do": "SF_Start sfp_keep\n$global.sfp_fail_t = sfp_target\nSF_Start sfp_fail\nSF_Start sfp_stage\nSF_Step sfp_stage go" },
+    { "offer": "sfp_keep", "is": false },
+    { "expect": { "$global.sagaforge_owners_sfp_keep": "jangala=hegemony", "$global.sagaforge_owners_sfp_fail": "jangala=hegemony;sfp_target=tritachyon", "$global.sagaforge_owners_sfp_stage": "sfp_station=independent" } },
+    { "day": true, "changes": [] },
+
+    { "world": { "places": ["jangala", "asharu", "corvus", "sfp_station", "sfp_target"], "people": ["sfp_reyes"], "owners": { "jangala": "pirates", "sfp_station": "independent", "sfp_target": "tritachyon" } } },
+    { "day": true, "changes": ["sfp_keep:jangala->pirates:keep", "sfp_fail:jangala->pirates:fail"] },
+    { "expect": { "$global.sfp_keep_state": "active", "$global.sfp_keep_ownerChanged": "jangala", "$global.sfp_keep_newOwner": "pirates", "$global.sagaforge_owners_sfp_keep": "jangala=pirates",
+                  "$global.sfp_fail_state": "fail", "$global.sagaforge_fail_sfp_fail": "true", "$global.sfp_fail_ownerChanged": "jangala" } },
+    { "day": true, "changes": [] },
+
+    { "world": { "places": ["jangala", "asharu", "corvus", "sfp_station", "sfp_target"], "people": ["sfp_reyes"], "owners": { "jangala": "pirates", "sfp_station": "luddic_path", "sfp_target": "pirates" } } },
+    { "day": true, "changes": ["sfp_stage:sfp_station->luddic_path:stage:lost:sfp_stage_ownerChanged"] },
+    { "expect": { "$global.sfp_stage_state": "active", "$global.sfp_stage_step": "lost", "$global.sfp_stage_ownerChanged": "sfp_station", "$global.sfp_stage_newOwner": "luddic_path", "$global.sagaforge_owners_sfp_fail": "jangala=pirates;sfp_target=tritachyon" } },
+
+    { "world": { "places": ["asharu", "corvus", "sfp_station"], "people": ["sfp_reyes"], "owners": { "sfp_station": "luddic_path" } } },
+    { "day": true, "changes": [] },
+    { "expect": { "$global.sagaforge_owners_sfp_keep": "jangala=pirates" } }
+  ]
+}

@@ -31,6 +31,8 @@ public final class PoolDef {
     public float nothing;
     public final List<Entry> entries = new ArrayList<Entry>();
     public String source;
+    /** SagaLib 1.3: only with / only without these mods (modsWith, modsWithout, modsAny). */
+    public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
     /**
      * SagaLib 1.2 (Phase 7e): "branch" (rolled by SF_RollPool) or "encounters": random encounters
      * whose entries are encounter ids, offered at vanilla's encounter points of {@link #points}
@@ -54,6 +56,7 @@ public final class PoolDef {
         if (!r.checkFormat(o)) return null;
         PoolDef p = new PoolDef();
         p.source = r.file;
+        p.gate = lastai.sagalib.core.ModGate.parse(o, "$", r);
         p.id = r.str(o, "id", "$", true, null);
         if (p.id == null) return null;
         p.draw = r.str(o, "draw", "$", false, "pickOne");

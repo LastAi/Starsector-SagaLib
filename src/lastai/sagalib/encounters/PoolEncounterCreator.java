@@ -37,6 +37,7 @@ public final class PoolEncounterCreator extends BaseEPEncounterCreator {
         List<PoolDef> out = new ArrayList<PoolDef>();
         for (PoolDef p : Saga.content().pools.values()) {
             if (!p.isEncounters() || p.frequency <= 0) continue;
+            if (!lastai.sagalib.core.Mods.allowed(mem, p.gate, "pool", p.id)) continue; // SagaLib 1.3
             boolean here = false;
             for (String s : p.points) if (PoolDef.pointType(s).equals(point.type)) here = true;
             if (!here) continue;
@@ -74,6 +75,7 @@ public final class PoolEncounterCreator extends BaseEPEncounterCreator {
             String pick = Pools.roll(pool, mem, RuleCommands.conditions(null, null, GameMemory.defaultMap()), random.nextLong(), false, null);
             if (Pools.NOTHING.equals(pick)) return;
             EncounterDef e = Saga.content().encounters.get(pick);
+            if (e != null && !lastai.sagalib.core.Mods.allowed(mem, e.gate, "encounter", e.id)) return; // SagaLib 1.3
             if (e == null) { SagaLog.warnOnce("poolenc:" + pool.id + ":" + pick, "encounter pool " + pool.id + ": no encounter \"" + pick + "\""); return; }
             lastai.sagalib.encounters.EncounterManager.spawnAtPoint(e, point.where, point.loc, point.getLocInHyper());
         } catch (Throwable t) {

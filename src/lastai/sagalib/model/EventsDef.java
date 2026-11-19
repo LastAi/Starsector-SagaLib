@@ -45,6 +45,8 @@ public final class EventsDef {
     public PoolDef pool;
     public final Map<String, Event> events = new LinkedHashMap<String, Event>();
     public String source;
+    /** SagaLib 1.3: only with / only without these mods (modsWith, modsWithout, modsAny). */
+    public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
 
     public static EventsDef parse(JSONObject o, JsonReader r) {
         if (!r.checkFormat(o)) return null;
@@ -54,6 +56,7 @@ public final class EventsDef {
         d.id = pool.id;
         d.pool = pool;
         d.source = r.file;
+        d.gate = lastai.sagalib.core.ModGate.parse(o, "$", r);
         d.name = r.str(o, "name", "$", false, d.id);
         Double mn = r.num(o, "min", "$", 0.0), mx = r.num(o, "max", "$", 1.0), iv = r.num(o, "intervalDays", "$", 30.0), fa = r.num(o, "firstAfterDays", "$", 0.0);
         d.min = mn == null ? 0 : Math.max(0, mn.intValue());

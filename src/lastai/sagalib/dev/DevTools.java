@@ -28,6 +28,18 @@ public final class DevTools {
     /** Re-reads quests, people, phrases and profiles from disk; built systems and spawned fleets stay as they are. */
     public static String reload() {
         Saga.reload();
+        // SagaLib 1.3: the reloaded content starts at the base versions: put this save's versions back
+        try {
+            lastai.sagalib.game.ItemVersions.run();
+        } catch (Throwable t) {
+            SagaLog.error("dev: versions after reload failed", t);
+        }
+        // SagaLib 1.3 (task #62): the reloaded settings (new fields, new defaults)
+        try {
+            lastai.sagalib.game.ModSettings.apply();
+        } catch (Throwable t) {
+            SagaLog.error("dev: settings after reload failed", t);
+        }
         People.applyAll();
         SaveReconcile.run();
         String s = Saga.content().summary();

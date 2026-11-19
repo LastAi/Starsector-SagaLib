@@ -1,0 +1,79 @@
+{
+  "name": "SagaLib 1.3: Wait nodes on a MagicLib bounty's end (bountyWaits): watched at their step, fired once per outcome, also when the bounty ended before the quest got there; nothing without MagicLib",
+  "quests": [
+    {
+      "format": 1, "id": "g_wq", "title": "Wait for it", "kind": "quest", "icon": "", "repeatable": false, "timeLimitDays": 0,
+      "start": { "kind": "manual" }, "requires": [],
+      "stages": [
+        { "id": "take", "title": "take", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] },
+        { "id": "hunt", "title": "hunt", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] },
+        { "id": "after", "title": "after", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] },
+        { "id": "late", "title": "late", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] },
+        { "id": "gone", "title": "gone", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] },
+        { "id": "hvb", "title": "hvb", "journal": "", "nextStep": "", "marker": "", "kind": "normal", "renamedFrom": [] }
+      ],
+      "variables": [], "targets": [], "rewards": [], "timers": [], "encounters": [], "arrivals": [], "phrases": [], "flags": [],
+      "bountyWaits": [
+        { "node": "w", "bounty": "g_b_main", "stage": "hunt", "succeeded": "g_wq_w_succeeded", "failed": "g_wq_w_failed", "expired": "g_wq_w_expired", "dismissed": "g_wq_w_dismissed" },
+        { "node": "w2", "bounty": "g_b_early", "stage": "late", "succeeded": "g_wq_w2_succeeded", "expired": "g_wq_w2_expired" },
+        { "node": "w3", "bounty": "g_b_gone", "stage": "gone", "succeeded": "g_wq_w3_succeeded" },
+        { "node": "w4", "bounty": "g_b_hvb", "stage": "hvb", "failed": "g_wq_w4_failed" }
+      ]
+    }
+  ],
+  "phrases": [],
+  "bounties": {
+    "known": ["g_b_main", "g_b_early", "g_b_gone", "g_b_hvb"],
+    "memKeys": { "g_b_hvb": "$HVB_g_hvb" }
+  },
+  "enabled": ["MagicLib"],
+  "steps": [
+    { "watch": true, "fired": [] },
+    { "do": "SF_Step g_wq take" },
+    { "do": "SF_StartBounty g_b_main" },
+    { "watch": true, "fired": [] },
+    { "do": "$global.g_b_main = true\n$global.g_b_main_succeeded = true" },
+    { "watch": true, "fired": [] },
+
+    { "do": "SF_Step g_wq hunt" },
+    { "watch": true, "fired": ["g_wq_w_succeeded"] },
+    { "expect": { "$global.sagaforge_bwait_g_wq_w_done": "hunt" } },
+    { "watch": true, "fired": [] },
+
+    { "do": "SF_Step g_wq after" },
+    { "watch": true, "fired": [] },
+    { "unset": ["$global.sagaforge_bwait_g_wq_w_done"] },
+    { "do": "SF_Step g_wq hunt" },
+    { "watch": true, "fired": ["g_wq_w_succeeded"] },
+
+    { "do": "SF_StartBounty g_b_early\n$global.g_b_early = true\n$global.g_b_early_expired = true" },
+    { "do": "SF_Step g_wq late" },
+    { "watch": true, "fired": ["g_wq_w2_expired"] },
+
+    { "do": "SF_StartBounty g_b_gone\n$global.g_b_gone = true" },
+    { "check": "SF_BountyState g_b_gone dismissed", "is": true },
+    { "do": "SF_Step g_wq gone" },
+    { "watch": true, "fired": [] },
+    { "expect": { "$global.sagaforge_bwait_g_wq_w3_done": "gone" } },
+
+    { "do": "SF_StartBounty g_b_hvb" },
+    { "expect": { "$global.HVB_g_hvb": "false" } },
+    { "do": "SF_Step g_wq hvb" },
+    { "watch": true, "fired": [] },
+    { "do": "$global.HVB_g_hvb = true\n$global.HVB_g_hvb_failed = true" },
+    { "watch": true, "fired": ["g_wq_w4_failed"] },
+
+    { "do": "SF_End g_wq fail" },
+    { "watch": true, "fired": [] },
+    { "unset": ["$global.sagaforge_bwait_g_wq_w4_done", "$global.sagaforge_bwait_g_wq_w3_done"] },
+
+    { "newGame": true },
+    { "enabled": [] },
+    { "do": "SF_Step g_wq hunt\n$global.g_b_main = true\n$global.g_b_main_succeeded = true" },
+    { "check": "SF_BountyState g_b_main unavailable", "is": true },
+    { "watch": true, "fired": [] },
+    { "unset": ["$global.sagaforge_bwait_g_wq_w_done"] },
+    { "enabled": ["MagicLib"] },
+    { "watch": true, "fired": ["g_wq_w_succeeded"] }
+  ]
+}

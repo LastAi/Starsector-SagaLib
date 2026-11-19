@@ -1,0 +1,52 @@
+{
+  "name": "SagaLib 1.3 mod conditions: the start record, SF_HasMod / SF_HasAnyMod, skipping (modsWith / modsWithout / modsAny) and the notices",
+  "quests": [],
+  "phrases": [],
+  "modLists": [
+    {
+      "format": 1,
+      "mod": "vgc",
+      "name": "Vanguard Compact",
+      "prefix": "vgc_",
+      "mods": [
+        { "id": "HMI", "name": "Hazard Mining Incorporated", "use": "optional" },
+        { "id": "uaf", "name": "United Aurora Federation", "use": "optional" },
+        { "id": "crewr", "name": "Crew Replacer", "use": "incompatible", "reason": "both change crew" },
+        { "id": "lw_lazylib", "name": "LazyLib", "use": "required" }
+      ]
+    }
+  ],
+  "enabled": ["HMI", "crewr", "lw_lazylib"],
+  "steps": [
+    { "record": true, "notices": ["vgc:crewr:incompatible"], "expect": { "$global.sagaforge_mod_vgc_HMI": "on", "$global.sagaforge_mod_vgc_uaf": "off", "$global.sagaforge_mod_vgc_crewr": "on", "$global.sagaforge_modtold_vgc_crewr": "incompatible" } },
+    { "check": "SF_HasMod HMI", "is": true },
+    { "check": "SF_HasMod HMI uaf", "is": false },
+    { "check": "SF_HasAnyMod HMI uaf", "is": true },
+    { "check": "SF_HasAnyMod uaf", "is": false },
+    { "check": "!SF_HasMod uaf", "is": true },
+    { "check": "SF_HasMod lw_lazylib", "is": true },
+    { "check": "SF_HasMod someothermod", "is": false },
+    { "gate": { "modsWith": ["HMI"], "modsWithout": ["uaf"] }, "owner": "vgc", "is": true },
+    { "gate": { "modsWith": ["uaf"] }, "owner": "vgc", "is": false },
+    { "gate": { "modsWithout": ["HMI"] }, "owner": "vgc", "is": false },
+    { "gate": { "modsAny": [["uaf", "HMI"]] }, "owner": "vgc", "is": true },
+    { "gate": { "modsAny": [["uaf", "someothermod"]] }, "owner": "vgc", "is": false },
+    { "record": true, "notices": [] },
+    { "enabled": ["HMI", "uaf", "crewr", "lw_lazylib"] },
+    { "check": "SF_HasMod uaf", "is": false, "owner": "vgc" },
+    { "check": "SF_HasMod uaf", "is": false },
+    { "gate": { "modsWith": ["uaf"] }, "owner": "vgc", "is": false },
+    { "gate": { "modsWithout": ["uaf"] }, "owner": "vgc", "is": true },
+    { "record": true, "notices": ["vgc:uaf:added"], "expect": { "$global.sagaforge_mod_vgc_uaf": "off", "$global.sagaforge_modtold_vgc_uaf": "added" } },
+    { "record": true, "notices": [] },
+    { "enabled": ["uaf", "crewr", "lw_lazylib"] },
+    { "check": "SF_HasMod HMI", "is": false },
+    { "gate": { "modsWith": ["HMI"] }, "owner": "vgc", "is": false },
+    { "record": true, "notices": ["vgc:HMI:removed"] },
+    { "enabled": ["HMI", "lw_lazylib"] },
+    { "record": true, "notices": [], "expect": { "$global.sagaforge_modtold_vgc_HMI": "undefined", "$global.sagaforge_modtold_vgc_uaf": "undefined", "$global.sagaforge_modtold_vgc_crewr": "undefined" } },
+    { "check": "SF_HasMod HMI", "is": true },
+    { "enabled": ["HMI", "crewr", "lw_lazylib"] },
+    { "record": true, "notices": ["vgc:crewr:incompatible"] }
+  ]
+}

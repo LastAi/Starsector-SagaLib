@@ -2,7 +2,7 @@
 
 A Starsector library (mod id `lastai_sagalib`) that runs quests, characters and conversations
 made with the **Saga Forge** editor ([Starsector-SagaForge](https://github.com/LastAi/Starsector-SagaForge)).
-Version 1.2, for Starsector **0.98a and 0.98.5a** (the same jar; the release has a zip for each
+Version 1.3, for Starsector **0.98a and 0.98.5a** (the same jar; the release has a zip for each
 game version, only their `mod_info.json` differs). From 1.0 on the save format is frozen: saved class names and
 fields, and the memory keys in docs/FORMAT.md, never change.
 License: [MIT](LICENSE). Changes: [CHANGELOG.md](CHANGELOG.md).

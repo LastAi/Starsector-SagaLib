@@ -18,6 +18,8 @@ import lastai.sagalib.model.QuestDef;
 public final class RuntimeScript implements EveryFrameScript {
     private static final float TICK_DAYS = 0.25f;
     private float sinceTick = TICK_DAYS; // tick soon after a load
+    /** SagaLib 1.3 (task #61): the day of the last owner check (once a day). */
+    private double lastOwnerCheck = -1;
 
     public static void register() {
         if (!Global.getSector().hasTransientScript(RuntimeScript.class)) Global.getSector().addTransientScript(new RuntimeScript());
@@ -58,11 +60,25 @@ public final class RuntimeScript implements EveryFrameScript {
                 try { lastai.sagalib.systems.SystemBuilder.applyWorldChanges(); } catch (Throwable t) { SagaLog.errorOnce("world-tick", "world changes failed", t); }
                 double now = EncounterManager.now();
                 for (QuestDef q : Saga.content().quests.values()) {
-                    if (q.timers.isEmpty()) continue;
                     for (String t : TimerLogic.tick(q, mem, now)) {
                         SagaLog.info("quest " + q.id + ": timer fired " + t);
                         Triggers.add(mem, t);
                     }
+                    // SagaLib 1.3: Wait nodes on a MagicLib bounty's end (MagicLib's memory keys; no MagicLib class)
+                    if (q.bountyWaits.isEmpty()) continue;
+                    try {
+                        for (String t : lastai.sagalib.core.BountyWaits.tick(q, mem, lastai.sagalib.core.Mods.ownerOfRule(q.id))) {
+                            SagaLog.info("quest " + q.id + ": MagicLib bounty ended, fired " + t);
+                            Triggers.add(mem, t);
+                        }
+                    } catch (Throwable t) { SagaLog.errorOnce("bountywait:" + q.id, "quest " + q.id + ": the bounty wait failed", t); }
+                }
+                // SagaLib 1.3 (task #61): markets of active quests changing owner, once a day
+                if (lastOwnerCheck < 0 || now - lastOwnerCheck >= 1.0) {
+                    lastOwnerCheck = now;
+                    try { OwnerChanges.tick(mem); } catch (Throwable t) { SagaLog.errorOnce("owners", "the market owner check failed", t); }
+                    // SagaLib 1.3 (task #70): people present only while their market's owner gets on with a faction
+                    try { PresenceRuntime.tick(mem); } catch (Throwable t) { SagaLog.errorOnce("presence", "the presence check failed", t); }
                 }
                 // SagaLib 1.2: roaming fleets
                 try { lastai.sagalib.encounters.RoamingFleets.tick(mem, now); } catch (Throwable t) { SagaLog.errorOnce("roaming", "roaming fleets failed", t); }
@@ -70,6 +86,7 @@ public final class RuntimeScript implements EveryFrameScript {
                 try { ProgressEvents.tick(); } catch (Throwable t) { SagaLog.errorOnce("progress", "progress events failed", t); }
                 // SagaLib 1.2: world event schedulers
                 for (lastai.sagalib.model.EventsDef d : Saga.content().events.values()) {
+                    if (!lastai.sagalib.core.Mods.allowed(mem, d.gate, "event scheduler", d.id)) continue; // SagaLib 1.3
                     try { WorldEvents.tick(d, mem, now); } catch (Throwable t) { SagaLog.errorOnce("events:" + d.id, "event scheduler " + d.id + " failed", t); }
                 }
             }
