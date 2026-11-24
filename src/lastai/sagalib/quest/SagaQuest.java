@@ -205,8 +205,8 @@ public class SagaQuest extends HubMissionWithBarEvent {
         QuestDef q = def();
         QuestDef.Stage st = q == null ? null : q.stage(step);
         if (st == null) return null;
-        if (st.nextStep != null && !st.nextStep.isEmpty()) return st.nextStep;
-        return st.title;
+        if (st.nextStep != null && !st.nextStep.isEmpty()) return journal(st.nextStep);
+        return journal(st.title);
     }
 
     @Override
@@ -223,11 +223,14 @@ public class SagaQuest extends HubMissionWithBarEvent {
         QuestDef.Stage st = q.stage(step);
         if (st != null) {
             String text = st.journal != null && !st.journal.isEmpty() ? st.journal : st.title;
-            if (text != null && !text.isEmpty()) info.addPara(text, opad);
+            if (text != null && !text.isEmpty()) info.addPara(journal(text), opad);
         } else if (q.start.offerText != null && !q.start.offerText.isEmpty()) {
-            info.addPara(q.start.offerText, opad);
+            info.addPara(journal(q.start.offerText), opad);
         }
     }
+
+    /** SagaLib 1.4 (task #75, found in game): the intel's texts fill $global tokens (random targets' facts, variables) as dialogs do. */
+    private static String journal(String text) { return lastai.sagalib.core.Values.fillGlobals(GameMemory.global(), text); }
 
     @Override
     public SectorEntityToken getMapLocation(SectorMapAPI map) {

@@ -205,6 +205,60 @@ public final class Settings {
         return out;
     }
 
+    // ------------------------------------------------------------------ the values when the game started (SagaLib 1.4)
+
+    /**
+     * SagaLib 1.4 (Saga Forge #67 U18): {@code $global.sagaforge_setting_<fieldID>} = the field's
+     * value when this game started, as text ({@link Values#str}: "true", "Hard", "5"). Kept in the
+     * save and never changed afterwards: versions that name a setting ({@code settingsWith}) are
+     * chosen from it.
+     */
+    public static String recordKey(String fieldId) { return "$global.sagaforge_setting_" + fieldId; }
+
+    /** The value recorded when the game started (null: not recorded, e.g. no content mod has this field). */
+    /**
+     * SagaLib 1.4 (Saga Forge #67 U37): the player's gender as a value versions may depend on
+     * ({@code settingsWith: ["player_gender=FEMALE"]}), recorded once like a setting and never
+     * changed after.
+     */
+    public static final String PLAYER_GENDER = "player_gender";
+
+    /**
+     * Records the player's gender ("MALE" or "FEMALE") in this save if it isn't recorded yet.
+     * Anything else (null, "ANY") isn't recorded: a later load tries again. True if recorded now.
+     */
+    public static boolean recordPlayerGender(Memory mem, String gender) {
+        if (mem == null || recorded(mem, PLAYER_GENDER) != null) return false;
+        if (!"MALE".equals(gender) && !"FEMALE".equals(gender)) return false;
+        mem.set(recordKey(PLAYER_GENDER), gender);
+        return true;
+    }
+
+    public static String recorded(Memory mem, String fieldId) {
+        Object v = mem == null ? null : mem.get(recordKey(fieldId));
+        return v == null ? null : String.valueOf(v);
+    }
+
+    /**
+     * Records every field not recorded yet in this save: the player's value when {@code player}
+     * gives one that reads as the field's type, else the default (the same value {@link #apply}
+     * sets). Called at a new game (before versions are chosen) and on every load, so a save made
+     * before SagaLib 1.4, or a field added by a mod's update, is recorded the first time it loads.
+     * Returns the fields recorded now.
+     */
+    public static List<Field> record(Memory mem, List<Field> fields, Player player) {
+        List<Field> out = new ArrayList<Field>();
+        for (Field f : fields) {
+            String k = recordKey(f.id);
+            if (mem.get(k) != null) continue;
+            Object v = player == null ? null : read(f, player.value(f));
+            if (v == null) v = f.def;
+            mem.set(k, Values.str(v));
+            out.add(f);
+        }
+        return out;
+    }
+
     // ------------------------------------------------------------------ scaling by a setting
 
     /** A multiplier read from a setting: {@code {"setting": id, "per": n, "factors": {"value": n}}}. */

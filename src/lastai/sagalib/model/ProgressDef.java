@@ -19,6 +19,8 @@ public final class ProgressDef {
     public static final class Outcome {
         public String id;
         public float weight = 1f;
+        /** SagaLib 1.4: the actions SagaLib runs itself (core.QuietOps); null = a rule on the trigger. */
+        public List<lastai.sagalib.core.QuietOps.Op> actions;
     }
 
     public static final class Stage {
@@ -29,6 +31,23 @@ public final class ProgressDef {
         public String icon = "";
         /** Picked at random when the stage is reached (each with its own trigger); empty = none. */
         public final List<Outcome> outcomes = new ArrayList<Outcome>();
+        /** SagaLib 1.4: the actions SagaLib runs itself (core.QuietOps); null = a rule on the trigger. Only without outcomes. */
+        public List<lastai.sagalib.core.QuietOps.Op> actions;
+    }
+
+    /**
+     * SagaLib 1.4: the op list run for a trigger of this event (SF_progress_&lt;id&gt;_&lt;stage&gt;[_&lt;outcome&gt;]),
+     * or null (no such trigger, or its actions are rules).
+     */
+    public List<lastai.sagalib.core.QuietOps.Op> quietOps(String trigger) {
+        for (Stage s : stages) {
+            if (s.outcomes.isEmpty()) {
+                if (lastai.sagalib.core.EventLogic.progressTrigger(id, s.id, null).equals(trigger)) return s.actions;
+            } else {
+                for (Outcome o : s.outcomes) if (lastai.sagalib.core.EventLogic.progressTrigger(id, s.id, o.id).equals(trigger)) return o.actions;
+            }
+        }
+        return null;
     }
 
     public static final class Factor {
@@ -103,7 +122,13 @@ public final class ProgressDef {
                 if (out.id == null) continue;
                 Double w = r.num(oc.json, "weight", oc.path, 1.0);
                 out.weight = w == null || w < 0 ? 0f : w.floatValue();
+                out.actions = lastai.sagalib.core.QuietOps.parse(oc.json, "actions", oc.path, r);
                 s.outcomes.add(out);
+            }
+            s.actions = lastai.sagalib.core.QuietOps.parse(e.json, "actions", e.path, r);
+            if (s.actions != null && !s.outcomes.isEmpty()) {
+                r.warn(JsonReader.at(e.path, "actions"), "stage \"" + s.id + "\" has outcomes: the picked outcome's actions run instead; these are ignored");
+                s.actions = null;
             }
             if (d.stages.size() >= MAX_STAGES) {
                 r.error(e.path, "at most " + MAX_STAGES + " stages; \"" + s.id + "\" is skipped");

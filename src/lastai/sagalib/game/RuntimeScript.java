@@ -92,7 +92,11 @@ public final class RuntimeScript implements EveryFrameScript {
             }
             if (!Global.getSector().getCampaignUI().isShowingDialog() && !Global.getSector().getCampaignUI().isShowingMenu()) {
                 String t = Triggers.poll(mem);
-                if (t != null && !TriggerDialog.fire(t)) Triggers.pushBack(mem, t);
+                // SagaLib 1.4: a world event's or progress stage's actions written as ops run without a dialog
+                java.util.List<lastai.sagalib.core.QuietOps.Op> ops = t == null ? null : Saga.content().quietOps(t);
+                if (ops != null) {
+                    if (!QuietRunner.run(t, ops)) Triggers.pushBack(mem, t);
+                } else if (t != null && !TriggerDialog.fire(t)) Triggers.pushBack(mem, t);
             }
         } catch (Throwable t) {
             SagaLog.errorOnce("runtime-script", "SagaLib's campaign script failed (logged once)", t);

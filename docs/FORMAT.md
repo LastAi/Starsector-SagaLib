@@ -46,6 +46,8 @@ path (for example both ship `data/sagaforge/factions.json`): they are different 
                "ships": ["buffalo_Standard"], "xp": 1000, "storyPoints": 1}],
   "timers": [{"node": "wait1", "trigger": "vgc_lost_convoy_wait1", "days": 7, "stage": "find"}],
   "encounters": [{"node": "ambush", "encounter": "vgc_belt_ambush", "defeated": "vgc_lost_convoy_ambush_defeated", "avoided": "vgc_lost_convoy_ambush_avoided"}],
+  "fights": [{"node": "vault", "won": "vgc_lost_convoy_vault_won", "left": "vgc_lost_convoy_vault_left", "engage": "Engage the defences",
+              "fleet": {"faction": "remnant", "type": "patrolMedium", "size": "fp", "points": 160, "quality": 1, "name": "The Custodian"}}],
   "bountyWaits": [{"node": "w", "bounty": "vgc_b_raid", "stage": "hunt", "succeeded": "vgc_lost_convoy_w_succeeded",
                    "failed": "", "expired": "vgc_lost_convoy_w_expired", "dismissed": ""}],
   "arrivals": ["vgc_convoy_wreck"],
@@ -57,6 +59,7 @@ path (for example both ship `data/sagaforge/factions.json`): they are different 
 - `kind` is `quest` (a vanilla hub mission: journal, markers, time limit) or `dialog` (a file only
   because it has inline phrases; no mission).
 - `bountyWaits` (SagaLib 1.3, optional): Wait nodes on a MagicLib bounty's end, see "MagicLib bounties".
+- `fights` (SagaLib 1.4, optional): Fight nodes (`SF_Fight <quest> <node>`), see "Fights".
 - `targets` (SagaLib 1.2): random targets, see "Random targets". `[]` or missing: none. A stage
   `marker`, an `arrivals` entry or an `entityFlags` entity may be `$global.<quest>_<var>`: the
   picked id.
@@ -92,7 +95,7 @@ in the loaded JSON. **Never rename or remove a saved field or class after 1.0.**
 | `SF_Step <quest> <step>` | script | `SF_Start` if not active yet, then set `$global.<quest>_step`, update the intel (journal text, next step, map marker of that stage, intel update notification). A stage of kind `success`/`fail` also ends the quest that way. |
 | `SF_End <quest> success\|fail` | script | End the mission: vanilla stage `COMPLETED`/`FAILED`, state key set, completed key on success. |
 | `SF_Reward <quest> <rewardId>` | script | Give that reward from the quest JSON: credits, rep, items, ships, XP, story points, each with vanilla's "Gained …" text in the dialog's text panel. |
-| `SF_Spawn <encounter>` / `SF_Despawn <encounter>` | script | Encounters (M7). |
+| `SF_Spawn <encounter>` / `SF_Despawn [encounter]` | script | Encounters (M7). 1.4: `SF_Despawn` without an id despawns the encounter of the fleet the dialog is with (`$sagaforge_encounter` in its memory), for a fleet's comm dialog. |
 | `SF_PlaceEntity <entity>` | script | SagaLib 1.1: place a deferred entity (`appears`) now, once. |
 | `SF_RemoveEntity <entity> [decivilize]` | script | SagaLib 1.1: remove an entity (fades out), once; one with a market only with `decivilize`. |
 | `SF_RemovePerson <person>` | script | SagaLib 1.1: the person is gone for good (`$global.sagaforge_gone_<person>`): removed from their market, comm directory and the important people; never recreated, never placed, never a fleet's captain again. |
@@ -105,6 +108,11 @@ in the loaded JSON. **Never rename or remove a saved field or class after 1.0.**
 | `SF_BountyState <bounty> <state> [more…]` | condition | SagaLib 1.3: the MagicLib bounty is `unavailable`, `offered`, `active`, `succeeded`, `failed`, `expired`, `dismissed` or `ended` (see "MagicLib bounties"). |
 | `SF_Achievement <id>` | script | SagaLib 1.3: unlocks a MagicLib achievement through the guarded bridge (see "MagicLib achievements"); without MagicLib it does nothing. |
 | `SF_FactionRep <factionA> <factionB> <level>` | condition | SagaLib 1.3: faction A is at least `<level>` with faction B (`VENGEFUL` … `COOPERATIVE`, or `notHostile` = `INHOSPITABLE` or better). Either faction may be a memory key, e.g. `$faction.id` (the owner of the market the dialog is at). A faction with itself is `COOPERATIVE`; a faction that doesn't exist makes it false (logged once). Vanilla's `RepIsAtWorst` is the player's standing; this one is between two factions (see "Presence"). |
+| `SF_TargetCommodity <quest> <var> has\|take\|give\|credits [mult]` | both | SagaLib 1.4: a commodity target's goods (see "Commodity targets"). `has` (condition): the player's cargo holds the amount. `take` / `give`: remove it from / add it to the cargo, with vanilla's "Lost" / "Gained" line. `credits [mult]`: pay mult (default 1) × base price × amount. Nothing picked: `has` is false, the others do nothing (logged once). |
+| `SF_GrantResearch <techId>` | script | SagaLib 1.4: the player's faction gets an AoTD Vaults of Knowledge tech as researched, through the guarded bridge (see "Vaults of Knowledge research"); without VoK it does nothing (logged once). |
+| `SF_HasResearch <techId> [faction]` | condition | SagaLib 1.4: the player (or the faction) has researched the VoK tech (see "Vaults of Knowledge research"); false without VoK. |
+| `SF_RunPlugin <className> ["quest=<id>" "node=<id>"] ["key=value" …]` | script | SagaLib 1.4 (each `key=value` in double quotes, or the game refuses the rules at load): runs a content mod's own class that implements `lastai.sagalib.api.SagaPlugin` (a new instance per call) and stores what it returns in `$global.<quest>_<node>_result` (see "Plugins"). Any failure is logged and counts as no result. |
+| `SF_Fight <quest> <node>` | script | SagaLib 1.4: a battle on the spot in the open dialog against the fleet of the quest's fight at that node, like vanilla's salvage defenders; afterwards the fight's `won` or `left` trigger in the same dialog (see "Fights"). No dialog, an unknown quest or node, or a fleet that can't be made: logged, false. |
 | `SF_BackToMenu` | script | The end of a conversation branch: clear the options and `FireAll PopulateOptions`; if no rule adds an option (a wreck or other custom entity has no menu) the dialog closes. |
 | `SF_AtStep <quest> <step>` | condition | true if state is `active` and the step is `<step>` |
 | `SF_QuestDone <quest> [success\|fail\|any]` | condition | true if the quest ended that way (default any) |
@@ -147,7 +155,7 @@ does:
 ## People
 
 ```json
-{"id": "vgc_reyes", "name": {"first": "Ilse", "last": "Reyes"}, "gender": "FEMALE", "faction": "vgc_vanguard",
+{"id": "vgc_reyes", "name": {"first": "Ilse", "last": "Reyes"}, "oneName": false, "gender": "FEMALE", "faction": "vgc_vanguard",
  "rank": "spaceCommander", "post": "stationCommander", "portrait": "graphics/portraits/x.png", "voice": "soldier",
  "personality": "steady", "placement": {"at": "market", "market": "vgc_haven", "inCommDirectory": true},
  "contact": {"types": ["military"], "importance": "HIGH"}, "tags": [], "phrases": [Phrase], "description": ""}
@@ -170,6 +178,31 @@ does:
 - SagaLib 1.3: `"presence": {"faction": "hegemony", "atLeast": "NEUTRAL", "elsewhere": "vgc_refuge"}`
   (only with placement `market`): present only while the market's owner gets on with a faction.
   See "Presence".
+- SagaLib 1.4: `"oneName": true`: a character with one name (a cat called Tyger). The one name is
+  kept in the last-name slot (`name.last`; moved there when only `name.first` was given) and the
+  first name is empty. See "One-name characters".
+
+### One-name characters (SagaLib 1.4, task #79)
+
+A one-name person is anyone whose first name is empty or blank and whose last name isn't: the
+`oneName` flag above, or any mod's person stored that way. Vanilla's `FullName.getFullName()` is
+`(first + " " + last).trim()`, and the engine's UI shows that full name, so `$personName`,
+`$PersonName` and `$personLastName` read right. But vanilla's token generator fills
+`$personFirstName` (0.98.5a also `$PersonFirstName`) with the empty first name ("Hi, .").
+
+- **SagaLib's generator `OneNameTokens`** (`game/OneNameTokens`, logic in `core/Names`): when the
+  dialog's active person (the target's active person, else a fleet's commander, as vanilla finds them)
+  is one-name, `$personFirstName` and `$PersonFirstName` are the one name. On 0.98a, where vanilla has
+  no `$PersonFirstName`, it is filled for one-name people only. Other people are left to vanilla.
+- **Why it wins**: the engine merges every generator's map in list order with `putAll` (a later
+  generator's value wins for the same token) before replacing anything. Vanilla adds its generator in
+  `CoreLifecyclePluginImpl.onGameLoad`, and the core plugin's `onGameLoad` runs before every mod's
+  (`ModManager.getEnabledModPlugins` lists it first). So `OneNameTokens` is registered in SagaLib's
+  `onGameLoad` only (on a new game too, since `onGameLoad(true)` follows it), never earlier.
+- **`$<person>_firstName`** (Saga Forge's generated name phrase): Saga Forge exports the one name as
+  its text; if a people file has it blank for a one-name person, SagaLib falls back to the one name
+  (the person as the game has them, else as the file defines them).
+- Golden case `test/golden/names.json` (step `activePerson`: the person the dialog is with).
 
 ## Factions runtime
 
@@ -304,6 +337,13 @@ Log one line per change. Never crash.
   combat points, quality. `size: explicit` builds an empty fleet of the faction and adds the
   listed variants. A `flagshipCommander` (one of the mod's people) commands the flagship. Place
   the fleet at `spawn.at`.
+- **Fleets: `randomPoints` and `extras`** (SagaLib 1.4, Saga Forge #67 U40), in an encounter's (or a
+  Fight node's) `fleet`: `randomPoints` (explicit fleets) adds ships drawn by vanilla's
+  FleetFactoryV3 for the faction, fleet type and quality for that many points, before the listed ones
+  join (the flagship rules stay those of the listed ships); `sizeScale` scales it as it scales
+  `points`. `extras` is a list of groups, `{"chance": 0 to 1 (default 1), "pick": "all" (default) or a
+  number, "ships": ["<variant>" or {"variant": "<id>", "weight": 1}]}`; at each spawn a group joins with
+  its chance and adds all its ships, or `pick` of them drawn by weight without repeats. Any fleet size.
 - Set fleet memory `$sagaforge_encounter = <id>`. Comm-link dialog rules are scoped to the fleet
   with the condition `$entity.sagaforge_encounter == <id>`, so other fleets keep vanilla's
   greetings.
@@ -334,6 +374,11 @@ Log one line per change. Never crash.
   to the new id.
 - **Outcomes**. Quest encounters list `defeated` / `avoided` triggers in the quest JSON's
   `encounters`.
+  - SagaLib 1.4: the encounter file's own `outcomes` (`{"defeated": "SF_enc_<id>_defeated",
+    "defeatedActions": [quiet ops], "avoided": …, "avoidedActions": […]}`) fire whoever spawned it.
+    Its trigger fires first, then the quest's (before 1.4 the encounter's own replaced the
+    quest's). Triggers starting `SF_enc_` are quiet: their `…Actions` run without a dialog (see
+    "Quiet ops"); without them, a rule on the trigger runs as for `SF_event_`.
   - When the fleet is destroyed or beaten in battle, SagaLib opens a rule-based dialog with the
     `defeated` trigger: `showInteractionDialog(new RuleBasedInteractionDialogPluginImpl(trigger), playerFleet)`,
     or fires it in the post-battle dialog if one is open.
@@ -364,6 +409,62 @@ Log one line per change. Never crash.
   - If the dialog has no options after the rules ran, and they added no text, dismiss it at once.
   - If they added text but no options, add one option "Continue" that closes the dialog.
   - This also covers rules that only run script lines (an Action chain).
+
+## Fights (quest `fights`, `SF_Fight`, SagaLib 1.4)
+
+A Fight node is a battle on the spot, in the dialog that is open (at a wreck, a station, a planet),
+the way vanilla's salvage defenders are fought (`rulecmd/salvage/SalvageDefenderInteraction`). Its
+rule script is one line, **`SF_Fight <quest> <node>`**, and the quest JSON lists the fight:
+
+```json
+"fights": [{"node": "vault", "won": "hel_persea_vault_won", "left": "hel_persea_vault_left",
+            "engage": "Engage the Custodian's defences",
+            "fleet": {"faction": "hel_warden", "type": "patrolMedium", "size": "fp", "points": 160,
+                      "quality": 1, "name": "The Custodian", "flagshipCommander": "hel_warden_ai"}}]
+```
+
+- **`fleet`** has exactly the shape of an encounter's `fleet` ("Encounters"), with the same meaning
+  and defaults (`type` default `patrolMedium`, `size` default `fp`, `points` default 50, no `quality`
+  = the faction's): `fp` builds with FleetFactoryV3, `explicit` adds the `variants` (with
+  `shipNames`, `flagship`), `flagshipCommander` commands it unless retired, `name` is the fleet's
+  name. A **named fleet** is written resolved, as for encounters: `explicit` with the template's
+  ships, plus `template` (its id: a win adds 1 to `$global.sagaforge_fleet_<template>_defeats`) and
+  `captainDiesOnDefeat` (a win retires the captain as `SF_RemovePerson` does). `size: "template"`
+  is read as `explicit` when `variants` are listed; without them the fight is a load error (SagaLib
+  has no fleet templates of its own).
+- **`won`** / **`left`**: rule triggers (missing: `<quest>_<node>_won` / `_left`). **`engage`**: the
+  first engage option's text (missing or blank: vanilla's "Engage the automated defenses"); the
+  option after the first battle is "Re-engage".
+- A missing `node` or `fleet`, a node listed twice or a fleet that can't be read is a load error
+  (the fight is skipped; `SF_Fight` for it then logs an error and does nothing).
+
+**What `SF_Fight` does** (in game; `game/FightRuntime`):
+
+1. No dialog, an unknown quest or node: logs an error, returns false.
+2. The fleet: if the interaction target's memory holds a live fleet under
+   **`$sagaforge_fight_<quest>_<node>`** (one left behind damaged, below), that one; else a fresh
+   one from `fleet` (the encounters' builder), placed at the target, not added to any location (as
+   vanilla's defenders). Either way it is made hostile (`MemFlags` make-hostile / aggressive).
+3. `dialog.setInteractionTarget(fleet)` and vanilla's `FleetInteractionDialogPluginImpl` with the
+   salvage defenders' config: leave always available, no comm link, no engage text / attitude /
+   transponder, no warning when not hostile, always attack vs attack, impacts ally reputation (not
+   the enemy's), no allies / enemies / stations pulled in, no looted credits, "Continue" to leave
+   without salvage, not dismissed on leave, XP printed to the dialog; in battle no AI retreat, no
+   objectives, the enemy deploys everything. Normal battle salvage; none of vanilla's extra Omega
+   weapons or derelict AI cores.
+4. On leaving it: the original plugin and target come back. Then:
+   - **Won outright**: the key is unset, the template's defeat counted / the captain retired, the
+     prompt is "You decide to…", and the `won` trigger fires in the same dialog (`FireBest`, as
+     vanilla's `BeatDefendersContinue`). No rule matches: back to the place's menu as
+     `SF_BackToMenu` does (or the dialog closes when nothing adds an option).
+   - **Left or lost**: if the battle was fought and the fleet lost ships or has a ship needing
+     repairs (vanilla's `persistDefenders` test), it is kept: parked far away with AI off and kept
+     going by `lastai.sagalib.game.FightFleetScript` on the entity (saved: the name never changes;
+     it stops once the key no longer holds the fleet), under the key, expiring after **10 days**.
+     Leaving without such damage changes nothing (a kept fleet keeps its remaining days). Then the
+     `left` trigger fires in the same dialog; no rule matches: the dialog closes (vanilla's
+     behaviour).
+- Fight fleets don't carry `$sagaforge_encounter`, so the encounter listener ignores them.
 
 ## Pools (`data/sagaforge/pools/<id>.json`, SagaLib 1.2)
 
@@ -424,7 +525,7 @@ A mod that uses pools requires SagaLib 1.2 (an older SagaLib doesn't know the co
 ## Random targets (quest `targets`, SagaLib 1.2)
 
 ```json
-"targets": [{"var": "ruin", "pick": "system|planet|entity|market", "systemFirst": true,
+"targets": [{"var": "ruin", "pick": "system|planet|entity|market|commodity", "systemFirst": true,
              "require": [{"c": "plRuins", "args": []}, {"c": "sysWithin", "args": ["giver", 12]}],
              "prefer": [{"c": "plConditions", "args": ["ANY", ["decivilized"]]}]}]
 ```
@@ -466,6 +567,52 @@ A mod that uses pools requires SagaLib 1.2 (an older SagaLib doesn't know the co
   pick.
 
 A mod that uses targets requires SagaLib 1.2.
+
+## Commodity targets (pick `commodity`, SagaLib 1.4, task #75)
+
+A commodity **at** a market, with vanilla's `HubMissionWithSearch.pickCommodity()`: the market
+search (the `mk…` criteria), then one `CommodityOnMarketAPI` of the matching markets (vanilla skips
+`meta` and `nonecon` commodities).
+
+```json
+{"var": "goods", "pick": "commodity",
+ "require": [{"c": "cmShort", "args": []}, {"c": "cmLegal", "args": []}, {"c": "mkSizeAtLeast", "args": [4]}],
+ "prefer": [{"c": "cmTags", "args": ["ANY", ["expensive"]]}],
+ "commodity": {"which": "vanilla|any|list", "ids": ["IndEvo_parts", "metals"],
+               "amount": {"unit": "econ|cargo", "n": 0.1, "perSize": false}}}
+```
+
+- **Criteria** (require or prefer): the market ones, plus `cmNotPersonnel`
+  (`…CommodityIsNotPersonnel`), `cmLegal` / `cmIllegal` (to the market's faction), `cmTags` (ReqMode,
+  tags), `cmPriceAtLeast` / `cmPriceAtMost` (base price), and yes/no only: `cmProduced` /
+  `cmNotProduced` (`…ProductionAtLeast(1)` / `…AtMost(0)`), `cmShort` / `cmNotShort` (`Deficit`),
+  `cmSurplus` / `cmNoSurplus` (`Surplus`), and `cmInStock <n>` (`…AvailableAtLeast(n)`, economy units).
+  No demand criteria and no thresholds above 1: with AoTD Theory of Toolbox max demand is 0 or 1 and
+  deficit and surplus are ToT's own numbers, so a threshold that works in vanilla would never match.
+- **`which`**: `vanilla` (default, also when `commodity` is missing): the 18 vanilla trade goods
+  (`core/Commodities.VANILLA_GOODS`: supplies, fuel, crew, marines, food, organics, volatiles, ore,
+  rare_ore, metals, rare_metals, heavy_machinery, domestic_goods, organs, drugs, hand_weapons,
+  luxury_goods, lobster); `any`: every economy commodity (other mods' too); `list`: the `ids` (an
+  id no mod defines is never picked). Added as one more commodity requirement
+  (`getSearch().commodityReqs`).
+- **`amount`**: `econ` (default): `n` economy units = `n × econUnit` cargo units, `econUnit` read from
+  the commodity's spec **when it is picked** (so ToT's changed units, food ×0.1 or rare metals ×10,
+  or another mod's commodity give a fitting amount), `× the market's size` with `perSize`; `cargo`:
+  `n` cargo units. Rounded half up, at least 1. Default `n` 0.1.
+- **Stored**: `<quest>_<var>` = the **market's id**, with the market's facts and details as a market
+  target (so a marker, `SF_IsTarget`, an Arrive and a person work as for a market pick), plus
+  `_commodity` (its name for texts, vanilla's `getLowerCaseName()`), `_commodityId`, `_amount` (cargo
+  units), `_basePrice` and `_value` (base price × amount, credits). The numbers are Integers, so a
+  text shows "200", not "200.0".
+- **Using it**: `SF_TargetCommodity` (rule commands) takes or gives the goods, checks the cargo and
+  pays for them. A reward's **`"targetCredits": {"var": "goods", "mult": 1.5}`** adds `mult × _value`
+  (rounded) to its credits when it is paid; `creditsScale` scales only the plain `credits`.
+- Logged on pick: `target <var> commodity = <id> x<amount> (econUnit …, base price …, market size …)`.
+- A scatter can't pick a commodity (load error).
+
+The pure part (`core/Commodities`: allowed ids, amounts, stored facts, credits) is shared with Saga
+Forge's Play mode through the golden case `commodity.json`. A mod that uses commodity targets,
+`SF_TargetCommodity` or `targetCredits` requires SagaLib 1.4.
 
 ## Phase 7e additions (SagaLib 1.2)
 
@@ -526,6 +673,9 @@ one-time factors, an intel update per stage).
   **`SF_progress_<event>_<stage>`** run (quietly, like world events); with `outcomes` one is picked by
   weight and **`SF_progress_<event>_<stage>_<outcome>`** runs instead. Memory:
   `$global.<event>_stage` (the last stage reached), `$global.<event>_<stage>_outcome`.
+- SagaLib 1.4: a stage (without outcomes) or an outcome may have **`"actions": [ops]`**: then SagaLib
+  runs those ops itself, without a dialog, instead of firing the trigger (see "Quiet ops"). A
+  stage's own `actions` next to `outcomes` are ignored (a load warning): the picked outcome's run.
 - **After the last stage**: with `restartAt` the bar goes back to it (the stages repeat); without,
   the event ends and isn't started again (`$global.sagaforge_pe_<event>_done`).
 - `negative`: a red bar, as for crises. `tag`: another intel tab besides "Major events".
@@ -580,8 +730,69 @@ encounter id; a route whose encounter is gone ends.
   ("Gained 100¢") closes at once; a rule that adds options opens its dialog. The **news item** is a
   `lastai.sagalib.game.SagaNewsIntel` (saved; strings only): title, text, icon, intel tag (default
   "Major events"), a place on the map, removed after `days`. Its title and text are translatable.
+- SagaLib 1.4: an entry may have **`"start": [ops]`** and / or **`"end": [ops]`**: then SagaLib runs
+  those ops itself, without a dialog, instead of firing that trigger (see "Quiet ops").
 - **Dev mode**: `$global.sagaforge_ev_<scheduler>_force = <event>` starts that event at the next
   tick (set by a test profile).
+
+## Quiet ops: event and progress actions without a dialog (SagaLib 1.4)
+
+Before 1.4 a world event's start / end actions and a progress stage's or outcome's actions were
+always rules on their trigger, fired in a dialog SagaLib opened and closed at once (the player saw
+it flash). Saga Forge now writes the actions as an **op list** when every one of them can run
+without a dialog, and then writes **no rule** for them:
+
+- `data/sagaforge/events/<scheduler>.json`: an entry's `"start": [ops]` and / or `"end": [ops]`;
+- `data/sagaforge/progress/<id>.json`: a stage's `"actions": [ops]` (stages without outcomes), an
+  outcome's `"actions": [ops]`.
+
+With the list present SagaLib runs the ops; without it, the trigger is fired in a dialog as before
+(actions with raw rules lines, or "the person you're talking to"). An empty list runs nothing. The
+ops run at the moment the trigger would have fired (the trigger queue `$global.sagaforge_pending`,
+when no dialog or menu is open), in order.
+
+```
+{"op":"set","key":"$global.x","value":"true","days":3}
+{"op":"unset","key":"$global.x"}
+{"op":"credits","amount":100}
+{"op":"item","id":"alpha_core","kind":"commodity|special","qty":1}
+{"op":"rep","faction":"hegemony","amount":5}   or   {"op":"rep","person":"hel_tyger","amount":5}
+{"op":"spawn","encounter":"id"}   {"op":"despawn","encounter":"id"}
+{"op":"placeEntity","entity":"id"}   {"op":"removeEntity","entity":"id","decivilize":true}
+{"op":"startQuest","quest":"id","stage":"st1"}
+{"op":"storyPoints","amount":1}   {"op":"xp","amount":1000}
+{"op":"progress","event":"id","points":50,"text":"optional"}
+{"op":"plugin","className":"data.scripts.X","args":{"k":"v"}}
+```
+
+| Op | Same as | Notes |
+|---|---|---|
+| `set` | `$key = value [days]` | `value` (a string; numbers / booleans are taken as written) is read as rules.csv reads a literal: `true` / `false`, a number (a Float), else text (surrounding quotes removed); `$other.key` copies that key's value (unset if it has none). `days`: expires after that many days. Missing `value`: `true`. |
+| `unset` | `unset $key` | |
+| `credits` | `AddCredits` / `SubCredits` | negative takes |
+| `item` | `AddRemoveCommodity` / `AddRemoveAnyItem SPECIAL` | negative `qty` takes; missing `qty` = 1. SagaLib finds the item's kind by its id (commodity, special item, weapon, wing), as rewards do; `kind` is only checked to be `commodity` or `special` (another value: a load warning). |
+| `rep` | `AdjustRep <faction> <points>` / `AdjustRepPerson <person> COOPERATIVE\|VENGEFUL <points>` | **points**, as those commands and quest rewards: 5 = +0.05 (`CustomRepImpact.delta = points × 0.01`), no limit. A person is found in ImportantPeople. `"$person"` is a load error (needs a dialog). |
+| `spawn` / `despawn` | `SF_Spawn` / `SF_Despawn` | |
+| `placeEntity` / `removeEntity` | `SF_PlaceEntity` / `SF_RemoveEntity [decivilize]` | |
+| `startQuest` | `SF_Start <quest>`, then `SF_Step <quest> <stage>` with `stage` | the quest is created directly (no mission hub) |
+| `storyPoints` / `xp` | `AddStoryPoints` / `AddXP` | |
+| `progress` | `SF_Progress <event> <points> ["text"]` | `points` rounded |
+| `plugin` | `SF_RunPlugin <className> "k=v" …` | no quest / node: the result goes to the local `$sagaforge_plugin_result`. A value starting with `$` is read from memory, as on the rule line; `quest` / `node` keys are dropped. The order of `args` isn't kept (JSON objects have none). |
+
+- **Memory keys**: `$global.`, `$player.` and `$faction.` (the player's faction) as in rules; a key
+  without one of those prefixes (`$x`) is in the **player fleet's memory**, the target of the dialog
+  these actions used to run in, so its meaning doesn't change. `$entity.`, `$market.`, `$person.`
+  mean nothing here (a load warning; the key goes to the player fleet's memory).
+- **What the player sees** instead of the dialog's "Gained …" lines: vanilla campaign messages in
+  the lower left (`MessageIntel`): "Gained / Lost N¢", "Gained / Lost N× item", "Gained N Story
+  Point(s)" (story point colour); XP through the game's own XP message (`addXP(xp, null, true)`);
+  reputation through vanilla's `CoreReputationPlugin` without a text panel, which posts its own
+  "Relationship with … improved by N" message. A progress op's points show as vanilla's intel update.
+- **Failures**: a bad op is a load error (logged with its JSON path) and left out; the other ops of
+  the list stay. In game an op that fails logs a `[SagaLib]` error naming the trigger and the op, and
+  the following ops still run. Each run logs one info line ("ran N of M op(s) without a dialog").
+- The same methods run an op and its rule command (`EncounterManager.spawn`, `SystemBuilder`,
+  `QuestRuntime`, `SagaProgressEvent.oneTime`, `Plugins.run`, `GameEffects`).
 
 ## Translations (SagaLib 1.2)
 
@@ -718,8 +929,35 @@ file and a `factions.json` file (the whole file: starting relations and scripted
 ```
 
 - A version holds when its `modsWith` / `modsWithout` / `modsAny` hold (the same keys and meaning
-  as mod conditions). `id` is a label (the dev menu, translation keys); it should be unique in the
-  list. `set` maps a **path** to a value.
+  as mod conditions) **and** (SagaLib 1.4) each entry of its `settingsWith` holds. `id` is a label
+  (the dev menu, translation keys); it should be unique in the list. `set` maps a **path** to a
+  value.
+- **`settingsWith`** (SagaLib 1.4, Saga Forge #67 U18): `["<fieldID>=<value>", …]`, values of the
+  content mods' settings (section "Mod settings (LunaLib)") **as recorded when the game started**
+  (`$global.sagaforge_setting_<fieldID>`, below there), compared as text: a Boolean is `true` /
+  `false`, a Radio its choice (`"sfa_hard=true"`, `"sfa_route=South"`). Saga Forge writes it only for
+  Boolean and Radio settings the author marked for versions, and never puts these in `modsWith`.
+  Inside SagaLib each entry is the token **`setting:<fieldID>=<value>`**, which takes part wherever a
+  mod id does: the mods an item mentions, the combinations, the stored choice
+  (`"mod1+setting:sfa_hard=true"`) and a quest's flags (`$global.sfv_<quest>_setting_sfa_hard_true`).
+  An entry without `=` or with a `+` is an error at load and that version never applies. A setting
+  nothing recorded (no content mod's LunaSettings.csv has it) never holds (logged once).
+  **`player_gender`** (Saga Forge #67 U37) is built in: the player's gender, `MALE` or `FEMALE`
+  (`"player_gender=FEMALE"`), recorded like a setting (`$global.sagaforge_setting_player_gender`)
+  the first time SagaLib records settings in the save (a new game, before versions are chosen; or the
+  first load of an older save) and never changed after. Not recorded while the game has no player or
+  the gender is `ANY`: until then a version with it doesn't hold (Base), without a warning.
+  A later change of the setting in LunaLib's menu doesn't change a save's versions: they were
+  chosen from the recorded value (conditions and Branch cases read `$global.<fieldID>`, the value
+  now, as before).
+
+  ```json
+  { "id": "sfa_ambush", "fleet": { "faction": "pirates", "points": 40 },
+    "versions": [
+      { "id": "setting:sfa_hard=true", "settingsWith": ["sfa_hard=true"], "set": { "fleet.points": 80 } },
+      { "id": "mod1+setting:sfa_hard=true", "modsWith": ["mod1"], "settingsWith": ["sfa_hard=true"], "set": { "fleet.faction": "mod1_raiders" } }
+    ] }
+  ```
 - **Paths**: segments joined by `.`; a segment is an object key, or `key[x]`: the element of the
   array `key` whose `"id"` (else, for an element without an id, `"token"`) is `x` (the same as
   translation keys; an element with neither isn't reachable). Setting a path creates missing
@@ -729,29 +967,33 @@ file and a `factions.json` file (the whole file: starting relations and scripted
   the version still applies. The path `id` can't be set. The paths of one version are applied in
   sorted order (Java `String` order, so a parent before its children): the game's JSON keeps no
   key order.
-- **Resolution** for a set of mods that count: take the versions that hold, sort them by
-  specificity (`modsWith` + `modsWithout` + `modsAny` entries; stable, so equal ones keep their
-  order in the file), and apply each one's `set` in that order to a copy of the item without
+- **Resolution** for a set of mods that count (and setting tokens): take the versions that hold,
+  sort them by specificity (`modsWith` + `modsWithout` + `modsAny` + `settingsWith` entries; stable,
+  so equal ones keep their order in the file), and apply each one's `set` in that order to a copy of the item without
   `versions`. So the most specific version wins, field by field, and a field no version sets
   keeps the base value.
 - **Conflict**: two versions that hold with the same specificity set the same path to different
   values, and no more specific version that holds sets it. The later one in the file wins, and
   SagaLib logs one warning per item and path (at load, for any combination). (Saga Forge asks
   for the value in the combined version, so its exports have none.)
-- **Mods an item mentions** = every mod named by its versions. At most 6 (an item with more
-  logs an error and uses its base). At load SagaLib parses every combination (at most 64) as a
-  normal item. A problem that only a combination has is logged once, ending in
+- **Mods an item mentions** = every mod named by its versions (and, SagaLib 1.4, every setting
+  token). At most 6 mods (an item with more logs an error and uses its base); with setting tokens,
+  at most 64 combinations (each mod on or off, times each setting's named values + 1 for "another
+  value"; two values of one setting never combine). At load SagaLib parses every combination (at
+  most 64) as a normal item. A problem that only a combination has is logged once, ending in
   `(in version <key>)`; a combination that can't be read at all uses the base.
 - **Base** = the item resolved with no mod counting, so a `modsWithout` version holds in it.
 - **Choosing** (new game: in `onNewGame`, right after the start record and before systems are
   built; every load: right after the record): for each item not chosen yet in this save, its
-  version = the mods it mentions that count for its owner (`Mods.counts`, the start record), stored
+  version = the mods it mentions that count for its owner (`Mods.counts`, the start record), and
+  (SagaLib 1.4) the setting tokens whose recorded value is theirs, stored
   as `$global.sagaforge_ver_<kind>_<id>` = `"base"` or the mod ids sorted (Java `String`
   order) and joined with `+` (`"sfb+sfj"`). `<kind>` ∈ `quest`, `person`, `system`, `encounter`,
   `pool`, `events`, `progress`, `scatter`, `factions` (`<id>` = the owner mod's id). **A stored
   choice never changes**: a mod added or removed later, or an update that adds versions for
   another mod, doesn't switch it (a stored mod the item no longer mentions is dropped when the
-  version is used; the stored key itself isn't rewritten). An item first seen in a running save
+  version is used; the stored key itself isn't rewritten). The same holds for settings: an item
+  chosen before an update added a setting version to it keeps its choice. An item first seen in a running save
   (added by an update) is chosen from the same record. The dev menu's reload chooses and applies
   again too.
 - For **quests** SagaLib also sets `$global.sfv_<questId>_<mod>` = `true` for each mod of the
@@ -821,7 +1063,10 @@ with versions and the version used for the mods enabled at startup.
 
 The shared golden case `test/golden/versions.json` covers resolution (2 optional mods, all 4
 combinations, inheritance, a conflict), choosing at new game, and that a mod added later changes
-nothing. Its extra keys: `versioned` (`[{ "kind", "owner", "item" }]`: items in their file
+nothing; since 1.4 also `settingsWith` (resolution with setting tokens, choosing from the recorded
+values, a later change of the setting changing nothing; top-level `settings` rows and the step
+`{"recordSettings": {fieldID: "value text"}}`, a `Settings.record` with these player values,
+`{}` = the defaults). Its extra keys: `versioned` (`[{ "kind", "owner", "item" }]`: items in their file
 format with `versions`; a `factions` item is the whole file) and the steps `{"newGame": true}`
 (an empty save), `{"choose": true}` (choose every item not chosen yet, after a `record`),
 `{"resolve": "<kind>:<id>", "on": [...], "is": {…}, "conflicts": ["<path>", …]}` (the item
@@ -1020,11 +1265,23 @@ String) and uses it when it reads as the field's type, else the default. Every a
 field again, so a value LunaLib no longer has goes back to the default. A `LunaSettingsListener`
 (registered once per game start) applies a mod's settings at once when the player saves them in
 LunaLib's menu during a campaign, and logs what changed; saved from the main menu, they apply on
-the next load. **LunaLib's values are shared by every save** (they live in `saves/common`). SagaLib
-saves nothing about settings: the `$global` keys are ordinary memory, written again on every load.
+the next load. **LunaLib's values are shared by every save** (they live in `saves/common`). Apart from
+the values recorded when the game starts (below), SagaLib saves nothing about settings: the
+`$global` keys are ordinary memory, written again on every load.
 Log: one line per content mod, e.g. `settings of sst_mod: 4 values (LunaLib)` or
 `(defaults; LunaLib isn't enabled)`. Dev menu › Mod settings lists each value now and where it came
-from.
+from, and the value at the start of this game.
+
+**The values when the game started** (SagaLib 1.4, Saga Forge #67 U18): SagaLib also records every
+value field once per save as **`$global.sagaforge_setting_<fieldID>`** = its value then, as text
+(`Values.str`: `true`, `Hard`, `5`): at a new game in `onNewGame`, right after the start record and
+before versions are chosen; and on every load for a field not recorded yet (a save started before
+SagaLib 1.4 records the values it has at its first load with 1.4; a field a mod's update adds is
+recorded at the next load; also after a dev-menu reload). The value is the player's from LunaLib
+when it reads as the field's type, else the default (the same rule as above). A recorded value is
+never changed: it is what `settingsWith` in versions compares with (section "Versions by installed
+mods"), so a save keeps the versions it started with. Log: `settings of <mod> recorded for this
+game (…): <id> <value>, …`.
 
 Settings work as conditions everywhere (`$global.sst_enable`, `$global.sst_difficulty == Hard`,
 `$global.sst_bonus >= 100`): quest `requires`, Branch cases, phrases.
@@ -1065,6 +1322,104 @@ off in MagicLib's settings, or for an id MagicLib doesn't have, it does nothing 
 per id. MagicLib keeps achievements in the game's common data (`magic_achievements.json`), not in a
 save: one unlocked stays unlocked in every playthrough, so unlike the other commands it doesn't
 depend on the start record.
+
+## Vaults of Knowledge research (SagaLib 1.4, task #77)
+
+AoTD Vaults of Knowledge (`aotd_vok`, checked against 5.0.7) keeps research in Java objects (its
+research manager in the sector's persistent data), not in memory, so rules can't read it and no rule
+command of VoK's grants a tech. SagaLib's two commands ask VoK through the VoK bridge
+(`src-optional/vok`, `VokBridge`, compiled against `Vok.jar` and loaded by class name by
+`game/VokResearch` only when VoK is enabled; the logic is `core/Research`).
+
+| Command | Use | Effect |
+|---|---|---|
+| `SF_GrantResearch <techId>` | script | The player's own faction gets the tech as researched, as VoK's console command `research_tech` does: its research option is set researched, VoK's research focus is cleared if it was this tech, and VoK's finished-research listeners run (`AoTDListenerUtilis.finishedResearch`). The dialog shows "Research completed: <name>" (a campaign message when there is no dialog). Already researched: nothing changes, no line. |
+| `SF_HasResearch <techId> [faction]` | condition | Without a faction (or `player`): VoK's `isResearchedForPlayer`, true when the player's faction **or the faction that commissions the player** has it. With a faction id: VoK's `haveFactionResearchedCertainTech`. |
+
+- The tech can be any enabled mod's (a row of its `data/campaign/aotd_tech_options.csv`), VoK's own
+  too. A content mod's own techs and its factions' research stances are data files only VoK reads
+  (Saga Forge FORMATS.md, "AoTD - Vaults of Knowledge 5.0.7"); SagaLib doesn't read them.
+- **AI factions in VoK 5.0.7** don't research one by one: VoK answers "has researched" for every AI
+  faction from one fixed list of 21 of its own techs (`AoTDFactionResearchManager.AI_FACTION_TECHS_START`).
+  So `SF_HasResearch <tech> <AI faction>` is true for those 21 and false for everything else,
+  including every other mod's tech. A faction VoK has no research manager for is false.
+- Without VoK, with a SagaLib built without its VoK bridge (build.sh skips it when `Vok.jar` isn't
+  installed), or for a tech VoK doesn't have: `SF_GrantResearch` does nothing and logs why once per
+  tech and reason; `SF_HasResearch` is false. An error inside VoK is logged once and treated the same.
+- **Unlocked by a quest** needs no command: VoK's `otherReq` column is `$key:Shown text`, a flag VoK
+  checks in the sector's memory, so a rule line `$global.<key> = true` makes the tech researchable.
+  Saga Forge names the key `$<techId>_unlocked`.
+- The dev menu's Mods page says whether the bridge is ready.
+
+## Plugins: a content mod's own Java (SagaLib 1.4, task #79)
+
+A content mod may ship its own small jar (listed under `"jars"` in its `mod_info.json`) with
+classes that do what data can't (e.g. shrink every market by one size at a story's end). A quest
+runs one with the script command
+
+```
+SF_RunPlugin <className> ["quest=<quest>" "node=<node>"] ["key=value" ...]
+```
+
+**Each `key=value` in double quotes.** The game's `Misc.tokenize` makes an unquoted `=` an operator
+token, and its rule parser refuses any operator in a command line while loading the rules
+(`RuleException: Operators (except for '!') not allowed in command invocations`, or "Multiple
+operators" for two; javap of `com.fs.starfarer.campaign.rules`, 0.98a-RC8): the game stops at
+load. A quoted `"key=value"` is one literal token.
+
+- **The interface** (`lastai.sagalib.api`, SagaLib's stable API):
+  ```java
+  public interface SagaPlugin {
+      /** A result id the quest branches on, or null / "" for none. */
+      String run(SagaPluginContext ctx, Map<String, String> args);
+  }
+  ```
+  `SagaPluginContext` (a final class SagaLib fills in): `getQuestId()`, `getNodeId()` (the line's
+  `quest=` / `node=`, null without them), `getRuleId()`, `getDialog()` (the `InteractionDialogAPI`,
+  may be null), `getMemoryMap()` (the rule's memory map, may be null), `hasDialog()`, and
+  `addText(text)`, `addText(text, color)`, `addTextHighlighted(text, highlights…)`, which add a
+  paragraph to the dialog and return false (showing nothing) when there is none.
+- **A new instance for every call**, made with vanilla's `Global.getSettings().getInstanceOfScript(className)`:
+  the script class loader (every enabled mod's jars); it caches the `Class` and calls
+  `newInstance()` each time, so the class needs a public no-argument constructor. SagaLib keeps no
+  state of the plugin and saves nothing of it; a plugin that must remember something uses memory
+  keys or the sector's persistent data itself.
+- **The arguments**: each quoted `"key=value"` token, split at the first `=`, in line order; spaces
+  are fine inside the quotes (`"text=Heads or tails?"`; a `"` inside can't be written, use `'`). A
+  value starting with `$` is read from memory by SagaLib (`"who=$global.x"`, `"owner=$faction.id"`;
+  missing = empty), since the game doesn't read `$` inside a quoted token. A word without `=` is
+  `true`. `quest` and `node` are SagaLib's (where the call comes from) and are not passed to the
+  plugin. The plugin gets a copy of the map.
+- **The result**: what `run` returns, trimmed, goes into `$global.<quest>_<node>_result` when the
+  line has both `quest=` and `node=`, else into the local `$sagaforge_plugin_result`. Null, blank, or
+  any failure **unsets** the key, so an old result never decides. The command returns true when
+  there was a result (it is a script command, not a condition).
+- **Failures never stop the game**: no such class (`isn't in any enabled mod's jars`), a class that
+  doesn't implement `SagaPlugin` (`isn't a plugin`), no public no-argument constructor, a class
+  compiled for a newer Java, or anything the plugin throws (with its stack trace). Each logs one
+  `[SagaLib]` error line with the rule id and the class; the result key is unset and the dialog
+  goes on. Every call also logs one info line with its arguments and result.
+- **How Saga Forge exports a Plugin node** (`<quest>_<node>`, results `ok` and `odd`):
+
+  | Rule id | Trigger | Conditions | Script |
+  |---|---|---|---|
+  | `<q>_<n>` | the node's entry | the node's entry | `SF_RunPlugin <class> "quest=<q>" "node=<n>" …` then `FireBest <q>_<n>_result` |
+  | `<q>_<n>_ok` | `<q>_<n>_result` | `$global.<q>_<n>_result == ok` | what follows the "ok" output |
+  | `<q>_<n>_odd` | `<q>_<n>_result` | `$global.<q>_<n>_result == odd` | what follows "odd" |
+  | `<q>_<n>_next` | `<q>_<n>_result` | (none) | what follows "next": no result, an unknown result or a failure |
+
+  FireBest takes the matching result rule (one condition) over the fallback (none). A node without
+  declared results is one rule: the line, then what follows. An Action's "Run a plugin" is the same
+  line (with its quest and node), a world event's or progress stage's has no `quest=` / `node=`.
+- Golden case `test/golden/plugins.json` (the line, the result key, failures), shared with Saga
+  Forge's Play mode.
+
+Compiling a plugin jar: against the game's `starfarer.api.jar` (and `json.jar`, `log4j-1.2.9.jar`,
+`lwjgl.jar`, `lwjgl_util.jar` if it uses them) plus `SagaLib/jars/SagaLib.jar`, with `javac
+--release 8` (what SagaLib itself uses; the game runs Java 17, so `--release 17` works too). Don't
+put SagaLib's classes into the jar; the mod needs SagaLib as a dependency (Saga Forge's export adds
+`lastai_sagalib` 1.4.0). The game's class loader refuses most of `java.io`, `java.nio.file.File*`
+and `java.lang.reflect` in mod classes, plugins included.
 
 ## Nexerelin quest skip (SagaLib 1.3, task #65)
 

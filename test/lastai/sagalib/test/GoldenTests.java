@@ -4,6 +4,7 @@ import lastai.sagalib.core.Conditions;
 import lastai.sagalib.core.JsonReader;
 import lastai.sagalib.core.MapMemory;
 import lastai.sagalib.core.Phrases;
+import lastai.sagalib.core.Plugins;
 import lastai.sagalib.core.Pools;
 import lastai.sagalib.core.Problems;
 import lastai.sagalib.core.QuestLogic;
@@ -43,6 +44,12 @@ import java.util.regex.Pattern;
  * <li>SagaLib 1.3 (task #62): settings (apply the top-level "settings" with these player values; {} = no LunaLib),
  * credits ([quest, reward] scaled now), fleetPoints (an encounter's scaled points), unset (keys that must be null);</li>
  * <li>SagaLib 1.3: watch (the campaign script's check of Wait nodes on a MagicLib bounty's end), expected {@code fired}.</li>
+ * <li>SagaLib 1.4 (Saga Forge #67 U18): recordSettings (record the top-level "settings" with these player values, as at
+ * a new game; recorded ones stay), before {@code choose}; versions with settingsWith compare with the recorded values.</li>
+ * <li>SagaLib 1.4 (task #79): plugin (what an SF_RunPlugin in this step's {@code do} returns: a text, null, or
+ * {@code {"throws": "…"}}), call (the line as read: className, quest, node, args); activePerson (a person of
+ * "people" is the one the dialog is with: $personName, $personFirstName … as vanilla's generator and SagaLib's
+ * one-name one fill them); people's phrases join the others, a one-name person's $&lt;id&gt;_firstName falls back.</li>
  * </ul>
  */
 public final class GoldenTests {
@@ -54,7 +61,15 @@ public final class GoldenTests {
         final Map<String, PhraseDef> phrases = new LinkedHashMap<String, PhraseDef>();
         final MapMemory memory = new MapMemory();
         final Fx.RecordingEffects fx = new Fx.RecordingEffects();
-        final Conditions conditions = new Conditions(memory, null);
+        // SagaLib 1.4 (task #75): SF_TargetCommodity has reads the simulated cargo (the game runs the rule command)
+        final Conditions conditions = new Conditions(memory, new Conditions.Commands() {
+            public Boolean eval(String name, List<String> args, String body) {
+                if (!"SF_TargetCommodity".equals(name) || args.size() < 3 || !"has".equals(args.get(2))) return null;
+                String id = lastai.sagalib.core.Commodities.commodityId(memory, args.get(0), args.get(1));
+                Integer have = id == null ? null : fx.cargo.get(id);
+                return lastai.sagalib.core.Commodities.has(memory, args.get(0), args.get(1), have == null ? 0 : have);
+            }
+        });
         final Random random = new Random();
         final List<String> spawned = new ArrayList<String>();
         final Map<String, PoolDef> pools = new LinkedHashMap<String, PoolDef>();
@@ -65,6 +80,22 @@ public final class GoldenTests {
         /** SagaLib 1.3 (task #62): the golden "settings" (a mod's LunaSettings.csv rows) and "encounters". */
         final List<lastai.sagalib.core.Settings.Field> settings = new ArrayList<lastai.sagalib.core.Settings.Field>();
         final Map<String, lastai.sagalib.model.EncounterDef> encounters = new LinkedHashMap<String, lastai.sagalib.model.EncounterDef>();
+        /** SagaLib 1.4 (task #79): what the step's plugin returns (a text, null, or {"throws": …}), and the last line read. */
+        Object plugin;
+        Plugins.Call lastCall;
+        /** SagaLib 1.4 (task #79): the generators' tokens for the active person (vanilla's, then SagaLib's one-name ones). */
+        final Map<String, String> tokens = new LinkedHashMap<String, String>();
+
+        /** As the game merges the generators for an active person: vanilla's person tokens, then OneNameTokens over them. */
+        void activePerson(lastai.sagalib.model.PersonDef d) {
+            tokens.clear();
+            String full = ((d.firstName == null ? "" : d.firstName) + " " + (d.lastName == null ? "" : d.lastName)).trim();
+            tokens.put("$personName", full);
+            tokens.put("$PersonName", full);
+            tokens.put("$personFirstName", d.firstName);
+            tokens.put("$personLastName", d.lastName);
+            tokens.putAll(lastai.sagalib.core.Names.personTokens(d.firstName, d.lastName));
+        }
 
         Run(String file) { this.file = file; }
 
@@ -110,6 +141,29 @@ public final class GoldenTests {
             } else if ("SF_StartBounty".equals(name)) {
                 // SagaLib 1.3 (task #59): when it may start, the bridge's accept makes MagicLib set its key false
                 if (lastai.sagalib.core.Bounties.cantStart(memory, null, q) == null) memory.set(lastai.sagalib.core.Bounties.globalKey(q), Boolean.FALSE);
+            } else if ("SF_TargetCommodity".equals(name)) {
+                // SagaLib 1.4 (task #75): as the rule command, with the recording effects' cargo and credits
+                String v = args.get(1), what = args.get(2);
+                String id = lastai.sagalib.core.Commodities.commodityId(memory, q, v);
+                if (id == null) return;
+                if ("credits".equals(what)) {
+                    Double mult = args.size() > 3 ? Values.number(args.get(3)) : Double.valueOf(1);
+                    long c = lastai.sagalib.core.Commodities.credits(memory, q, v, mult == null ? 1 : mult);
+                    if (c != 0) fx.credits(c);
+                } else if ("take".equals(what)) fx.item(id, -lastai.sagalib.core.Commodities.amount(memory, q, v));
+                else if ("give".equals(what)) fx.item(id, lastai.sagalib.core.Commodities.amount(memory, q, v));
+                else throw new AssertionError(at + ": SF_TargetCommodity " + what);
+            } else if ("SF_RunPlugin".equals(name)) {
+                // SagaLib 1.4 (task #79): the line as core.Plugins reads it; the step's "plugin" stands in for the class
+                lastCall = Plugins.parse(args, memory);
+                if (lastCall == null) throw new AssertionError(at + ": SF_RunPlugin without a class");
+                final Object ret = plugin;
+                Plugins.run(memory, lastCall, new Plugins.Host() {
+                    public String run(Plugins.Call c) throws Exception {
+                        if (ret instanceof JSONObject && ((JSONObject) ret).has("throws")) throw new IllegalStateException(((JSONObject) ret).getString("throws"));
+                        return ret == null || ret == JSONObject.NULL ? null : String.valueOf(ret);
+                    }
+                }, at);
             } else if ("SF_Spawn".equals(name)) {
                 if (!spawned.contains(q)) spawned.add(q);
             } else if ("SF_Despawn".equals(name)) spawned.remove(q);
@@ -126,7 +180,13 @@ public final class GoldenTests {
                 String tail = tok.substring(trimmed.length());
                 String rep;
                 PhraseDef p = phrases.get(trimmed);
-                if (p != null) rep = subst(Phrases.text(p, conditions, random)) + tail;
+                if (p != null) {
+                    String ptext = Phrases.text(p, conditions, random);
+                    // SagaLib 1.4 (task #79): a one-name person's $<id>_firstName (game/PhraseTokens)
+                    lastai.sagalib.model.PersonDef owner = people.get(p.owner);
+                    if (owner != null) ptext = lastai.sagalib.core.Names.firstNamePhrase(p.token, p.owner, ptext, owner.firstName, owner.lastName);
+                    rep = subst(ptext) + tail;
+                } else if (tokens.containsKey(trimmed)) rep = tokens.get(trimmed) + tail;
                 else if (memory.values.containsKey(trimmed)) rep = Values.str(memory.get(trimmed)) + tail;
                 else rep = "[" + trimmed + "]" + tail;
                 m.appendReplacement(out, Matcher.quoteReplacement(rep));
@@ -209,7 +269,11 @@ public final class GoldenTests {
         JSONArray pe = g.optJSONArray("people");
         for (int i = 0; pe != null && i < pe.length(); i++) {
             lastai.sagalib.model.PersonDef p = lastai.sagalib.model.PersonDef.parse(pe.getJSONObject(i), "$.people[" + i + "]", new JsonReader(f, pp));
-            if (p != null) run.people.put(p.id, p);
+            if (p != null) {
+                run.people.put(p.id, p);
+                // their phrases, as Content puts every person's phrases with the others
+                for (PhraseDef pph : p.phrases) if (!run.phrases.containsKey(pph.token)) run.phrases.put(pph.token, pph);
+            }
         }
         T.yes(pp.isEmpty(), f + ": people parse: " + pp.all());
         // SagaLib 1.3 (task #62): a mod's settings rows (as loadCSV gives them) and encounters in their file format
@@ -303,7 +367,37 @@ public final class GoldenTests {
                 run.memory.values.clear();
                 lastai.sagalib.core.Mods.resetSkipped();
             }
+            // SagaLib 1.4 (task #75): the player's cargo, and a commodity pick as TargetSearch stores it
+            if (s.has("cargo")) {
+                JSONObject c = s.getJSONObject("cargo");
+                for (Iterator<?> it = c.keys(); it.hasNext(); ) { String k = String.valueOf(it.next()); run.fx.cargo.put(k, c.getInt(k)); }
+            }
+            if (s.has("commodity")) {
+                JSONObject c = s.getJSONObject("commodity");
+                QuestDef q = run.quests.get(c.getString("quest"));
+                T.yes(q != null, at + ": no quest " + c.optString("quest"));
+                QuestDef.Target tg = null;
+                for (QuestDef.Target x : q.targets) if (x.var.equals(c.getString("var"))) tg = x;
+                T.yes(tg != null && tg.commodity != null, at + ": no commodity target " + c.optString("var"));
+                lastai.sagalib.core.Commodities.store(run.memory, q.id, tg.var, tg.commodity, c.getString("id"), c.getString("name"), c.getDouble("econUnit"), c.getDouble("basePrice"), c.optInt("size", 1));
+                if (s.has("allowed")) {
+                    java.util.List<String> al = lastai.sagalib.core.Commodities.allowed(tg.commodity);
+                    T.eq(s.isNull("allowed") ? null : strings(s.getJSONArray("allowed")), al, at + ": allowed commodities");
+                }
+            }
+            // SagaLib 1.4 (task #79): what SF_RunPlugin's plugin returns in this step (default: no result)
+            run.plugin = s.has("plugin") ? s.get("plugin") : null;
+            run.lastCall = null;
             if (s.has("do")) run.script(s.getString("do"), at);
+            if (s.has("call")) {
+                T.yes(run.lastCall != null, at + ": SF_RunPlugin ran");
+                JSONObject got = new JSONObject();
+                got.put("className", run.lastCall.className);
+                got.put("quest", run.lastCall.questId == null ? JSONObject.NULL : run.lastCall.questId);
+                got.put("node", run.lastCall.nodeId == null ? JSONObject.NULL : run.lastCall.nodeId);
+                got.put("args", new JSONObject(run.lastCall.args));
+                T.eq(lastai.sagalib.core.Versions.canonical(s.get("call")), lastai.sagalib.core.Versions.canonical(got), at + ": the plugin's call");
+            }
             // SagaLib 1.3 (task #62): a settings apply (the player's values as text; {} = no LunaLib), scaled credits and fleet points
             if (s.has("settings")) {
                 final JSONObject pv = s.getJSONObject("settings");
@@ -339,6 +433,13 @@ public final class GoldenTests {
                 JSONArray nw = s.optJSONArray("notices");
                 for (int k = 0; nw != null && k < nw.length(); k++) want.add(nw.getString(k));
                 if (nw != null) T.eq(want, fresh, at + ": notices");
+            }
+            // SagaLib 1.4 (Saga Forge #67 U18): the settings recorded as the game starts (the player's values as text; {} = defaults)
+            if (s.has("recordSettings")) {
+                final JSONObject pv = s.getJSONObject("recordSettings");
+                lastai.sagalib.core.Settings.record(run.memory, run.settings, pv.length() == 0 ? null : new lastai.sagalib.core.Settings.Player() {
+                    public Object value(lastai.sagalib.core.Settings.Field fd) { return pv.has(fd.id) ? pv.opt(fd.id) : null; }
+                });
             }
             if (s.has("gate")) {
                 JsonReader gr = new JsonReader(f, new Problems());
@@ -388,6 +489,12 @@ public final class GoldenTests {
                 if (s.has("moves")) T.eq(strings(s.getJSONArray("moves")), got, at + ": presence moves");
             }
             if (s.has("check")) T.eq(s.get("is"), run.conditions.owner(s.optString("owner", null)).eval(s.getString("check")), at + ": " + s.getString("check"));
+            // SagaLib 1.4 (task #79): the dialog's active person (their name tokens, one-name ones filled by SagaLib)
+            if (s.has("activePerson")) {
+                lastai.sagalib.model.PersonDef ap = run.people.get(s.getString("activePerson"));
+                T.yes(ap != null, at + ": no person " + s.getString("activePerson"));
+                run.activePerson(ap);
+            }
             if (s.has("token")) T.eq(s.get("is"), run.subst(s.getString("token")), at + ": " + s.getString("token"));
             if (s.has("reload")) {
                 run.quests = quests(s.getJSONArray("reload"), at);
@@ -420,7 +527,9 @@ public final class GoldenTests {
                 for (Iterator<?> it = e.keys(); it.hasNext(); ) keys.add(String.valueOf(it.next()));
                 Collections.sort(keys);
                 for (String k : keys) {
-                    String got = "@credits".equals(k) ? Long.toString(run.fx.credits) : Values.str(run.memory.get(k));
+                    String got = "@credits".equals(k) ? Long.toString(run.fx.credits)
+                            : k.startsWith("@cargo:") ? String.valueOf(run.fx.cargo.containsKey(k.substring(7)) ? run.fx.cargo.get(k.substring(7)) : 0)
+                            : Values.str(run.memory.get(k));
                     T.eq(e.getString(k), got, at + ": " + k);
                 }
             }

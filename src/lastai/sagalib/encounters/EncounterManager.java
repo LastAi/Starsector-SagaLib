@@ -37,6 +37,8 @@ public final class EncounterManager {
 
     /** Fleet memory key; comm dialog rules test $entity.sagaforge_encounter == &lt;id&gt;. */
     public static final String FLEET_KEY = "$sagaforge_encounter";
+    /** SagaLib 1.4 (#67 U43): the reason SagaLib's fleet flags are set with (vanilla's Misc.setFlagWithReason). */
+    public static final String REASON = "sagaforge";
     private static final float FOREVER = 1000000f;
 
     static EncounterDef def(String id) { return Saga.content().encounters.get(id); }
@@ -97,6 +99,13 @@ public final class EncounterManager {
 
     /** SF_Despawn: the fleet leaves peacefully; outcome avoided (fired once the dialog is closed). */
     public static void despawn(String encounterId, String ruleId, InteractionDialogAPI dialog) {
+        // SagaLib 1.4 (#67 U43): no id = the encounter of the fleet this dialog is with (a comm link)
+        if (encounterId == null || encounterId.isEmpty()) {
+            Object t = dialog == null ? null : dialog.getInteractionTarget();
+            Object id = t instanceof CampaignFleetAPI ? ((CampaignFleetAPI) t).getMemoryWithoutUpdate().get(FLEET_KEY) : null;
+            if (id == null) { SagaLog.error("SF_Despawn in rule " + ruleId + ": no encounter given, and the dialog isn't with an encounter's fleet"); return; }
+            encounterId = String.valueOf(id);
+        }
         EncounterDef e = def(encounterId);
         if (e == null) {
             SagaLog.error("SF_Despawn in rule " + ruleId + ": unknown encounter \"" + encounterId + "\"");
@@ -128,6 +137,9 @@ public final class EncounterManager {
         m.unset(MemFlags.MEMORY_KEY_MAKE_HOSTILE);
         m.unset(MemFlags.MEMORY_KEY_MAKE_AGGRESSIVE);
         m.unset(MemFlags.MEMORY_KEY_PURSUE_PLAYER);
+        // SagaLib 1.4 (#67 U43): and the player may leave (a fleet let go in its comm dialog blocked it)
+        Misc.clearFlag(m, MemFlags.MEMORY_KEY_MAKE_PREVENT_DISENGAGE);
+        m.unset(MemFlags.MEMORY_KEY_MAKE_PREVENT_DISENGAGE);
         m.set(MemFlags.MEMORY_KEY_MAKE_NON_HOSTILE, true);
         Misc.makeUnimportant(f, "sagaforge_" + e.id);
         f.clearAssignments();
@@ -143,9 +155,10 @@ public final class EncounterManager {
             if (e.template != null) EncounterLogic.countDefeat(mem(), e.template);
             if (e.captainDiesOnDefeat && e.flagshipCommander != null && !e.flagshipCommander.isEmpty()) lastai.sagalib.game.People.retire(e.flagshipCommander, "the fleet of encounter " + e.id + " was defeated");
         }
-        String trigger = EncounterLogic.resolve(mem(), e, Saga.content().quests, defeated, now());
-        SagaLog.info("encounter " + e.id + ": " + (defeated ? "defeated" : "avoided") + (trigger != null ? "; firing " + trigger : ""));
-        if (trigger != null) Triggers.add(mem(), trigger);
+        // SagaLib 1.4 (#67 U46): the encounter's own outcome actions, then the quest's exit
+        java.util.List<String> triggers = EncounterLogic.resolveAll(mem(), e, Saga.content().quests, defeated, now());
+        SagaLog.info("encounter " + e.id + ": " + (defeated ? "defeated" : "avoided") + (triggers.isEmpty() ? "" : "; firing " + triggers));
+        for (String t : triggers) Triggers.add(mem(), t);
     }
 
     /** The manager tick (runtime script): spawns and stage-end despawns, and spawned encounters whose fleet is gone. */
@@ -279,15 +292,27 @@ public final class EncounterManager {
         return f;
     }
 
-    /** The fleet of an encounter (its ships, captain and name), not yet in the sector. */
-    static CampaignFleetAPI build(EncounterDef e, Vector2f locInHyper) {
+    /**
+     * The fleet of an encounter (its ships, captain and name), not yet in the sector; null (logged) if
+     * it can't be made. SagaLib 1.4: also a quest fight's fleet (SF_Fight), from the same "fleet" JSON.
+     */
+    public static CampaignFleetAPI build(EncounterDef e, Vector2f locInHyper) {
         if (Global.getSector().getFaction(e.faction) == null) {
             SagaLog.error("encounter " + e.id + " (" + e.source + "): unknown faction \"" + e.faction + "\"");
             return null;
         }
         CampaignFleetAPI f;
         if (e.explicit()) {
-            f = FleetFactoryV3.createEmptyFleet(e.faction, e.fleetType, null);
+            // SagaLib 1.4 (#67 U40): with a random part, vanilla draws those ships first, then the listed ones join
+            f = null;
+            if (e.randomPoints > 0) {
+                float rp = lastai.sagalib.core.Settings.points(e.randomPoints, e.sizeScale, lastai.sagalib.game.GameMemory.global());
+                FleetParamsV3 rpp = new FleetParamsV3(locInHyper, e.faction, e.quality, e.fleetType, rp, 0f, 0f, 0f, 0f, 0f, 0f);
+                rpp.ignoreMarketFleetSizeMult = true;
+                f = FleetFactoryV3.createFleet(rpp);
+                if (f != null) SagaLog.info("encounter " + e.id + ": " + f.getFleetData().getNumMembers() + " ships drawn for " + rp + " random fleet points");
+            }
+            if (f == null) f = FleetFactoryV3.createEmptyFleet(e.faction, e.fleetType, null);
             for (int i = 0; i < e.variants.size(); i++) {
                 String v = e.variants.get(i);
                 try {
@@ -312,6 +337,20 @@ public final class EncounterManager {
             FleetParamsV3 p = new FleetParamsV3(locInHyper, e.faction, e.quality, e.fleetType, points, 0f, 0f, 0f, 0f, 0f, 0f);
             p.ignoreMarketFleetSizeMult = true;
             f = FleetFactoryV3.createFleet(p);
+        }
+        // SagaLib 1.4 (#67 U40): extra groups, each with its chance, all or some of their ships
+        if (f != null && !e.extras.isEmpty()) {
+            java.util.List<String> extra = lastai.sagalib.core.FleetExtras.roll(e.extras, new java.util.Random());
+            for (String v : extra) {
+                try {
+                    if (Global.getSettings().getVariant(v) == null) throw new IllegalArgumentException("unknown variant");
+                    FleetMemberAPI m = f.getFleetData().addFleetMember(v);
+                    m.getRepairTracker().setCR(m.getRepairTracker().getMaxCR());
+                } catch (Throwable t) {
+                    SagaLog.error("encounter " + e.id + ": extra variant \"" + v + "\" skipped (" + t.getMessage() + ")");
+                }
+            }
+            SagaLog.info("encounter " + e.id + ": extra groups added " + extra.size() + " ship" + (extra.size() == 1 ? "" : "s") + (extra.isEmpty() ? "" : " " + extra));
         }
         if (f == null || f.getFleetData().getNumMembers() == 0) {
             SagaLog.error("encounter " + e.id + ": the fleet came out empty; not spawned");
@@ -346,12 +385,14 @@ public final class EncounterManager {
         m.set(MemFlags.FLEET_IGNORED_BY_OTHER_FLEETS, true);
         m.set(MemFlags.FLEET_DO_NOT_IGNORE_PLAYER, true); // as MagicLib's bounty fleets: without it they ignore the player too
         if (e.hostile) {
-            m.set(MemFlags.MEMORY_KEY_MAKE_HOSTILE, true);
-            m.set(MemFlags.MEMORY_KEY_MAKE_AGGRESSIVE, true);
+            // SagaLib 1.4 (Saga Forge #67 U43): with a reason, as vanilla's MakeOtherFleet... commands set
+            // them, so a dialog can switch them off again (MakeOtherFleetHostile sagaforge false)
+            Misc.setFlagWithReason(m, MemFlags.MEMORY_KEY_MAKE_HOSTILE, REASON, true, -1);
+            Misc.setFlagWithReason(m, MemFlags.MEMORY_KEY_MAKE_AGGRESSIVE, REASON, true, -1);
         }
         if (e.noRepImpact) m.set(MemFlags.MEMORY_KEY_NO_REP_IMPACT, true);
-        if (e.allowDisengage) m.set(MemFlags.MEMORY_KEY_MAKE_ALLOW_DISENGAGE, true);
-        else m.set(MemFlags.MEMORY_KEY_MAKE_PREVENT_DISENGAGE, true);
+        if (e.allowDisengage) Misc.setFlagWithReason(m, MemFlags.MEMORY_KEY_MAKE_ALLOW_DISENGAGE, REASON, true, -1);
+        else Misc.setFlagWithReason(m, MemFlags.MEMORY_KEY_MAKE_PREVENT_DISENGAGE, REASON, true, -1);
         if (e.important) Misc.makeImportant(f, "sagaforge_" + e.id);
         if ("ambush".equals(e.behavior)) f.setTransponderOn(false);
     }

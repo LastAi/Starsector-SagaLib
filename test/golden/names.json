@@ -1,0 +1,21 @@
+{
+  "name": "SagaLib 1.4 (task #79): one-name characters: \"oneName\" keeps the one name in the last-name slot (moved there when only the first was given); for a one-name active person (the flag, or any blank first name with a last name) $personFirstName and $PersonFirstName are the one name, $personName and $personLastName read right as in vanilla; a one-name person's $<id>_firstName phrase falls back to the one name; two-name people are left to vanilla",
+  "quests": [],
+  "phrases": [],
+  "people": [
+    { "id": "pga_tyger", "name": { "first": "", "last": "Tyger" }, "oneName": true, "faction": "independent",
+      "phrases": [ { "token": "$pga_tyger_firstName", "owner": "pga_tyger", "mode": "first-match", "cases": [], "otherwise": "" } ] },
+    { "id": "pga_mousey", "name": { "first": "Mousey", "last": "" }, "oneName": true, "faction": "independent", "phrases": [] },
+    { "id": "pga_butters", "name": { "first": " ", "last": "Butters" }, "faction": "independent", "phrases": [] },
+    { "id": "pga_ana", "name": { "first": "Ana", "last": "Varga" }, "faction": "independent",
+      "phrases": [ { "token": "$pga_ana_firstName", "owner": "pga_ana", "mode": "first-match", "cases": [], "otherwise": "" } ] }
+  ],
+  "steps": [
+    { "activePerson": "pga_tyger", "token": "[$personFirstName] [$PersonFirstName] [$personName] [$personLastName]", "is": "[Tyger] [Tyger] [Tyger] [Tyger]" },
+    { "activePerson": "pga_mousey", "token": "[$personFirstName] [$PersonFirstName] [$personName] [$personLastName]", "is": "[Mousey] [Mousey] [Mousey] [Mousey]" },
+    { "activePerson": "pga_butters", "token": "Hi, $personFirstName. Hi, $PersonFirstName. [$personName] [$personLastName]", "is": "Hi, Butters. Hi, Butters. [Butters] [Butters]" },
+    { "activePerson": "pga_ana", "token": "[$personFirstName] [$personName] [$personLastName]", "is": "[Ana] [Ana Varga] [Varga]" },
+    { "token": "[$pga_tyger_firstName]", "is": "[Tyger]" },
+    { "token": "[$pga_ana_firstName]", "is": "[]" }
+  ]
+}

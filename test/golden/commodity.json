@@ -1,0 +1,63 @@
+{
+  "name": "SagaLib 1.4 (task #75): commodity targets: the allowed commodities (vanilla's 18 goods by default), amounts from econUnit (vanilla's and AoTD ToT's units, x market size, fixed cargo units), the stored tokens, the cargo check, taking and giving the goods, and credits as a multiple of base price x amount",
+  "quests": [
+    {
+      "format": 1, "id": "gct_deliver", "title": "Delivery", "kind": "quest", "icon": "", "repeatable": false, "timeLimitDays": 0,
+      "start": { "kind": "manual" },
+      "requires": [],
+      "stages": [ { "id": "go", "title": "Go", "journal": "", "nextStep": "", "marker": "$global.gct_deliver_goods", "kind": "normal", "renamedFrom": [] } ],
+      "variables": [],
+      "rewards": [
+        { "id": "pay", "credits": 1000, "targetCredits": { "var": "goods", "mult": 1.5 } },
+        { "id": "goodsOnly", "targetCredits": { "var": "goods", "mult": 1 } },
+        { "id": "notPicked", "credits": 500, "targetCredits": { "var": "nothing", "mult": 2 } }
+      ],
+      "targets": [
+        { "var": "goods", "pick": "commodity", "require": [ { "c": "cmLegal", "args": [] }, { "c": "cmShort", "args": [] } ], "prefer": [ { "c": "cmTags", "args": ["ANY", ["expensive"]] } ],
+          "commodity": { "which": "vanilla", "amount": { "unit": "econ", "n": 0.1 } } },
+        { "var": "parts", "pick": "commodity", "require": [ { "c": "cmInStock", "args": [2] } ], "prefer": [],
+          "commodity": { "which": "list", "ids": ["IndEvo_parts", "metals"], "amount": { "unit": "econ", "n": 0.05, "perSize": true } } },
+        { "var": "fixed", "pick": "commodity", "require": [], "prefer": [],
+          "commodity": { "which": "any", "amount": { "unit": "cargo", "n": 150 } } },
+        { "var": "tiny", "pick": "commodity", "require": [], "prefer": [] }
+      ],
+      "timers": [], "encounters": [], "arrivals": [], "phrases": [], "flags": []
+    }
+  ],
+  "phrases": [],
+  "steps": [
+    { "commodity": { "quest": "gct_deliver", "var": "goods", "id": "food", "name": "food", "econUnit": 2000, "basePrice": 20, "size": 5 },
+      "allowed": ["supplies", "fuel", "crew", "marines", "food", "organics", "volatiles", "ore", "rare_ore", "metals", "rare_metals", "heavy_machinery", "domestic_goods", "organs", "drugs", "hand_weapons", "luxury_goods", "lobster"],
+      "expect": { "$global.gct_deliver_goods_commodity": "food", "$global.gct_deliver_goods_commodityId": "food", "$global.gct_deliver_goods_amount": "200", "$global.gct_deliver_goods_basePrice": "20", "$global.gct_deliver_goods_value": "4000" } },
+    { "token": "Deliver $global.gct_deliver_goods_amount $global.gct_deliver_goods_commodity, worth $global.gct_deliver_goods_value credits.", "is": "Deliver 200 food, worth 4000 credits." },
+    { "check": "SF_TargetCommodity gct_deliver goods has", "is": false },
+    { "check": "$global.gct_deliver_goods_amount >= 200", "is": true },
+    { "cargo": { "food": 250 }, "check": "SF_TargetCommodity gct_deliver goods has", "is": true },
+    { "do": "SF_TargetCommodity gct_deliver goods take", "expect": { "@cargo:food": "50" } },
+    { "check": "SF_TargetCommodity gct_deliver goods has", "is": false },
+    { "do": "SF_TargetCommodity gct_deliver goods credits 1.5", "expect": { "@credits": "6000" } },
+    { "credits": ["gct_deliver", "pay"], "is": 7000 },
+    { "credits": ["gct_deliver", "goodsOnly"], "is": 4000 },
+    { "credits": ["gct_deliver", "notPicked"], "is": 500 },
+    { "do": "SF_TargetCommodity gct_deliver goods give", "expect": { "@cargo:food": "250" } },
+    { "do": "SF_TargetCommodity gct_deliver goods credits", "expect": { "@credits": "10000" } },
+
+    { "commodity": { "quest": "gct_deliver", "var": "goods", "id": "food", "name": "food", "econUnit": 200, "basePrice": 20, "size": 5 },
+      "expect": { "$global.gct_deliver_goods_amount": "20", "$global.gct_deliver_goods_value": "400" } },
+    { "commodity": { "quest": "gct_deliver", "var": "goods", "id": "rare_metals", "name": "transplutonics", "econUnit": 2000, "basePrice": 200, "size": 5 },
+      "expect": { "$global.gct_deliver_goods_amount": "200", "$global.gct_deliver_goods_value": "40000", "$global.gct_deliver_goods_commodity": "transplutonics" } },
+    { "commodity": { "quest": "gct_deliver", "var": "goods", "id": "luxury_goods", "name": "luxury goods", "econUnit": 500, "basePrice": 100.4, "size": 3 },
+      "expect": { "$global.gct_deliver_goods_amount": "50", "$global.gct_deliver_goods_basePrice": "100", "$global.gct_deliver_goods_value": "5020" } },
+
+    { "commodity": { "quest": "gct_deliver", "var": "parts", "id": "IndEvo_parts", "name": "ship components", "econUnit": 500, "basePrice": 120, "size": 6 },
+      "allowed": ["IndEvo_parts", "metals"],
+      "expect": { "$global.gct_deliver_parts_amount": "150", "$global.gct_deliver_parts_value": "18000" } },
+    { "commodity": { "quest": "gct_deliver", "var": "fixed", "id": "ore", "name": "ore", "econUnit": 5000, "basePrice": 10, "size": 7 },
+      "allowed": null,
+      "expect": { "$global.gct_deliver_fixed_amount": "150", "$global.gct_deliver_fixed_value": "1500" } },
+    { "commodity": { "quest": "gct_deliver", "var": "tiny", "id": "marines", "name": "marines", "econUnit": 5, "basePrice": 200, "size": 3 },
+      "expect": { "$global.gct_deliver_tiny_amount": "1", "$global.gct_deliver_tiny_value": "200" } },
+    { "commodity": { "quest": "gct_deliver", "var": "tiny", "id": "marines", "name": "marines", "econUnit": 25, "basePrice": 200, "size": 3 },
+      "expect": { "$global.gct_deliver_tiny_amount": "3" } }
+  ]
+}

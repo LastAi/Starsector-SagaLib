@@ -20,6 +20,9 @@ public final class EventsDef {
         /** May start while it already runs (each run with its own news item and end). Default: one at a time. */
         public boolean stack;
         public News news;
+        /** SagaLib 1.4: the start / end actions SagaLib runs itself (core.QuietOps); null = a rule on the trigger, as before. */
+        public java.util.List<lastai.sagalib.core.QuietOps.Op> start;
+        public java.util.List<lastai.sagalib.core.QuietOps.Op> end;
     }
 
     /** A news item in the intel screen (all texts are translatable). */
@@ -75,6 +78,8 @@ public final class EventsDef {
             Double du = r.num(e.json, "durationDays", e.path, 0.0);
             ev.durationDays = du == null || du < 0 ? 0f : du.floatValue();
             ev.stack = e.json.optBoolean("stack", false);
+            ev.start = lastai.sagalib.core.QuietOps.parse(e.json, "start", e.path, r);
+            ev.end = lastai.sagalib.core.QuietOps.parse(e.json, "end", e.path, r);
             JSONObject n = r.obj(e.json, "news", e.path, false);
             if (n != null) {
                 String np = JsonReader.at(e.path, "news");

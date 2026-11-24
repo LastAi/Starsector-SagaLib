@@ -66,7 +66,15 @@ final class Fx {
         public void personRep(String person, double points) { log.add("personRep " + person + " " + points); }
 
         @Override
-        public void item(String item, int qty) { log.add("item " + item + " " + qty); }
+        public void item(String item, int qty) {
+            log.add("item " + item + " " + qty);
+            // SagaLib 1.4 (task #75): the player's cargo, as the game's (never below 0)
+            Integer have = cargo.get(item);
+            cargo.put(item, Math.max(0, (have == null ? 0 : have) + qty));
+        }
+
+        /** SagaLib 1.4: the player's cargo (golden step "cargo" sets it, expect "@cargo:<id>" reads it). */
+        final java.util.Map<String, Integer> cargo = new java.util.LinkedHashMap<String, Integer>();
 
         @Override
         public void loot(String group, int chances, int value) { log.add("loot " + group + " " + chances + " " + value); }

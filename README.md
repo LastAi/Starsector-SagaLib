@@ -42,11 +42,23 @@ between the two is [docs/FORMAT.md](docs/FORMAT.md). In short, a content mod shi
   `SF_Reward`, `SF_AddShip`, `SF_RemoveShip`, the displays `SF_ShowPlanetInfo`, `SF_ShowFleets`,
   `SF_ShowShip`, `SF_Show image|faction|ships|cargo|heading|skills`, and the conditions
   `SF_AtStep`, `SF_QuestDone`, `SF_QuestState`, and `SF_Spawn` / `SF_Despawn` for encounters
-  (`data/sagaforge/encounters/*.json`, with defeated/avoided outcomes and quest timers). Star systems (`data/sagaforge/systems/*.json`) are built on new game, and
+  (`data/sagaforge/encounters/*.json`, with defeated/avoided outcomes and quest timers), and
+  `SF_Fight <quest> <node>` (1.4): a battle on the spot in the open dialog, like vanilla's salvage
+  defenders, then the fight's won / left rules. Star systems (`data/sagaforge/systems/*.json`) are built on new game, and
   in existing saves when the file says `addToExistingSaves`.
 
 Quest progress is kept in memory keys only (`$global.<quest>_state`, `$global.<quest>_step`,
 `$global.<quest>_<variable>`), so rules.csv can test them directly too.
+
+**Your own Java** (SagaLib 1.4): a content mod can ship a small jar with classes that implement
+`lastai.sagalib.api.SagaPlugin` (`String run(SagaPluginContext ctx, Map<String, String> args)`);
+`SF_RunPlugin <className> ["key=value" …]` (each pair in double quotes) runs one, a new instance each time, and stores what it
+returns in `$global.<quest>_<node>_result` for the dialog to branch on. A missing class or an
+exception is logged and counts as no result. See [docs/FORMAT.md](docs/FORMAT.md), "Plugins".
+
+**One-name characters** (SagaLib 1.4): for any person with an empty first name and a last name (any
+mod's, or `"oneName": true` in a people file), `$personFirstName` and `$PersonFirstName` say the one
+name instead of vanilla's empty first name. See docs/FORMAT.md, "One-name characters".
 
 Errors in the JSON are logged in `starsector.log` with the prefix `[SagaLib]`, the file and the
 JSON path; the bad object is skipped and the game keeps running.

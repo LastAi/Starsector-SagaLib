@@ -38,6 +38,11 @@ public final class TestMain {
                 SettingsTests.class,
                 NexerelinTests.class,
                 QuestSkipTests.class,
+                ResearchTests.class,
+                PluginTests.class,
+                FightTests.class,
+                QuietOpsTests.class,
+                NamesTests.class,
                 GoldenTests.class,
                 SandboxTests.class,
         };

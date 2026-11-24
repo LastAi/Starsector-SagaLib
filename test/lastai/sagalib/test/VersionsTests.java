@@ -80,6 +80,88 @@ public final class VersionsTests {
         }
     }
 
+    /** SagaLib 1.4 (Saga Forge #67 U18): settingsWith: setting tokens in the on-set, specificity, choosing from the recorded values. */
+    public static void settingsWithAndRecordedValues() throws Exception {
+        JSONObject item = Fx.json("{'id':'x','v':0,'w':0,'versions':["
+                + "{'id':'hard','settingsWith':['diff=Hard'],'set':{'v':1,'w':1}},"
+                + "{'id':'a','modsWith':['a'],'set':{'v':2}},"
+                + "{'id':'a+hard','modsWith':['a'],'settingsWith':['diff=Hard'],'set':{'v':3}},"
+                + "{'id':'bad','settingsWith':['no+plus=x'],'set':{'w':9}},"
+                + "{'id':'gone','settingsWith':['gone=true'],'set':{'w':8}}]}");
+        T.eq(on("a", "setting:diff=Hard", "setting:gone=true"), Versions.mentioned(item), "mentioned: the mod and the usable setting tokens, sorted (the one with \"+\" is skipped)");
+        Versions.Result r = Versions.resolve(item, on("setting:diff=Hard"));
+        T.eq(1, r.value.getInt("v"), "settingsWith holds when its token counts");
+        T.eq(0, Versions.resolve(item, on("setting:diff=Easy")).value.getInt("v"), "another value doesn't hold");
+        r = Versions.resolve(item, on("a", "setting:diff=Hard"));
+        T.eq(3, r.value.getInt("v"), "modsWith + settingsWith is more specific than either");
+        T.eq(new ArrayList<String>(), r.conflicts, "no conflict: the combined version decides");
+        T.eq(1, r.errors.size(), "a settingsWith entry with \"+\" is an error: " + r.errors);
+        T.eq(8, Versions.resolve(item, on("setting:gone=true", "setting:no+plus=x")).value.getInt("w"), "the version with a bad entry never holds");
+        T.eq(6, Versions.combinations(on("a", "setting:diff=Hard", "setting:diff=Easy")), "2 (a) x 3 (Hard, Easy, another)");
+        T.eq(6, Versions.subsets(on("a", "setting:diff=Hard", "setting:diff=Easy")).size(), "no subset holds two values of one setting");
+        T.eq("diff", Versions.settingId("setting:diff=Hard"), "setting id");
+        T.eq("Hard", Versions.settingValue("setting:diff=Hard"), "setting value");
+        T.eq(null, Versions.settingId("a"), "a mod isn't a token");
+        T.eq("$global.sfv_q_setting_diff_Hard", Versions.questFlag("q", "setting:diff=Hard"), "quest flag of a token");
+        final Set<String> enabled = new HashSet<String>(on("a"));
+        Mods.setup(new Mods.Enabled() { public boolean isEnabled(String id) { return enabled.contains(id); } }, null);
+        try {
+            MapMemory m = new MapMemory();
+            m.set(lastai.sagalib.core.Settings.recordKey("diff"), "Hard");
+            List<String> got = Versions.choose(m, "quest", "q", "own", Versions.mentioned(item));
+            T.eq(on("a", "setting:diff=Hard"), got, "chosen from the mods and the recorded values; an unknown setting never holds");
+            T.eq("a+setting:diff=Hard", m.get(Versions.memKey("quest", "q")), "stored with the token");
+            T.eq(Boolean.TRUE, m.get(Versions.questFlag("q", "setting:diff=Hard")), "the token's quest flag");
+            T.eq(on("a", "setting:diff=Hard"), Versions.mods("a+setting:diff=Hard"), "the key parses back");
+            m.set(lastai.sagalib.core.Settings.recordKey("diff"), "Easy");
+            T.eq(on("a", "setting:diff=Hard"), Versions.choose(m, "quest", "q", "own", Versions.mentioned(item)), "a stored choice never changes");
+            MapMemory fresh = new MapMemory();
+            fresh.set(lastai.sagalib.core.Settings.recordKey("diff"), "Easy");
+            T.eq(on("a"), Versions.choose(fresh, "person", "p", "own", Versions.mentioned(item)), "another recorded value: not that version");
+        } finally {
+            Mods.setup(new Mods.Enabled() { public boolean isEnabled(String id) { return false; } }, null);
+        }
+    }
+
+    /** SagaLib 1.4 (Saga Forge #67 U37): versions by the player's gender, recorded once when the game starts. */
+    public static void playerGenderRecordedOnce() throws Exception {
+        JSONObject john = Fx.json("{'id':'john','firstName':'John','versions':[{'id':'f','settingsWith':['player_gender=FEMALE'],'set':{'firstName':'Joan'}}]}");
+        MapMemory m = new MapMemory();
+        T.eq(false, lastai.sagalib.core.Settings.recordPlayerGender(m, "ANY"), "ANY isn't recorded (a later load tries again)");
+        T.eq(null, lastai.sagalib.core.Settings.recorded(m, "player_gender"), "nothing recorded");
+        T.eq(new ArrayList<String>(), Versions.choose(m, "person", "john", "own", Versions.mentioned(john)), "not known: Base, no warning");
+        MapMemory g = new MapMemory();
+        T.eq(true, lastai.sagalib.core.Settings.recordPlayerGender(g, "FEMALE"), "recorded");
+        T.eq(false, lastai.sagalib.core.Settings.recordPlayerGender(g, "MALE"), "never changed after");
+        T.eq("FEMALE", lastai.sagalib.core.Settings.recorded(g, "player_gender"), "the first value stays");
+        List<String> got = Versions.choose(g, "person", "john", "own", Versions.mentioned(john));
+        T.eq(on("setting:player_gender=FEMALE"), got, "the female version chosen");
+        T.eq("Joan", Versions.resolve(john, got).value.getString("firstName"), "her name");
+        MapMemory male = new MapMemory();
+        lastai.sagalib.core.Settings.recordPlayerGender(male, "MALE");
+        T.eq("John", Versions.resolve(john, Versions.choose(male, "person", "john", "own", Versions.mentioned(john))).value.getString("firstName"), "a male player: Base");
+    }
+
+    /** SagaLib 1.4 (Saga Forge #67 U40): a fleet's extra groups: chance, all or some, by weight, no repeats. */
+    public static void fleetExtrasRoll() throws Exception {
+        lastai.sagalib.core.FleetExtras.Group always = new lastai.sagalib.core.FleetExtras.Group();
+        always.variants.addAll(java.util.Arrays.asList("a", "b"));
+        lastai.sagalib.core.FleetExtras.Group never = new lastai.sagalib.core.FleetExtras.Group();
+        never.chance = 0f; never.variants.add("x");
+        lastai.sagalib.core.FleetExtras.Group two = new lastai.sagalib.core.FleetExtras.Group();
+        two.pick = 2; two.variants.addAll(java.util.Arrays.asList("p", "q", "r")); two.weights.addAll(java.util.Arrays.asList(1f, 1f, 0f));
+        java.util.List<String> got = lastai.sagalib.core.FleetExtras.roll(java.util.Arrays.asList(always, never, two), new java.util.Random(5));
+        T.eq(4, got.size(), "all of the first, none of the second, two of the third: " + got);
+        T.eq(on("a", "b"), new ArrayList<String>(got.subList(0, 2)), "a group with pick 0 adds all its ships");
+        T.eq(true, got.contains("p") && got.contains("q") && !got.contains("r"), "two drawn without repeats; weight 0 never: " + got);
+        int hits = 0;
+        lastai.sagalib.core.FleetExtras.Group half = new lastai.sagalib.core.FleetExtras.Group();
+        half.chance = 0.5f; half.variants.add("h");
+        java.util.Random r = new java.util.Random(1);
+        for (int i = 0; i < 1000; i++) hits += lastai.sagalib.core.FleetExtras.roll(java.util.Arrays.asList(half), r).size();
+        T.eq(true, hits > 400 && hits < 600, "a 50% group joins about half the time: " + hits);
+    }
+
     static ContentTests.FakeSource source() throws Exception {
         return new ContentTests.FakeSource()
                 .row("sfa_people", "people", "data/sagaforge/people/sfa_people.json", "sfa")

@@ -11,5 +11,8 @@ public interface Memory {
 
     void set(String key, Object value);
 
+    /** SagaLib 1.4: set, expiring after {@code days} (as rules.csv's "$x = value days"). */
+    default void set(String key, Object value, float days) { set(key, value); }
+
     void unset(String key);
 }

@@ -15,16 +15,21 @@ STARSECTOR_CORE="${STARSECTOR_CORE:-/d/Starsector/starsector-core}"
 STARSECTOR_MODS="${STARSECTOR_MODS:-$(dirname "$STARSECTOR_CORE")/mods}"
 if [ -d "$MOD_DIR/../../.cache" ]; then DEFAULT_BUILD="$MOD_DIR/../../.cache/sagalib-build"; else DEFAULT_BUILD="$MOD_DIR/../.build/sagalib-build"; fi
 BUILD_DIR="${BUILD_DIR:-$DEFAULT_BUILD}"
+# The jar to write (tests build a second one elsewhere, so the mod's own jar keeps its bridges).
+JAR_OUT="${JAR_OUT:-$MOD_DIR/jars/SagaLib.jar}"
 
 # Optional bridges: <src-optional folder>|<jar glob under STARSECTOR_MODS>[|more]
 # See src-optional/README.md. MagicLib (task #59): quests start and check its bounties.
 # LunaLib (task #62): the player's values of the mods' settings, and menu changes at once.
 # MagicLib (task #65): quests unlock its achievements (same folder as the bounties).
 # Nexerelin (task #65): the quest-skip plugin named in the mods' questSkip.json.
+# AoTD Vaults of Knowledge (task #77): quests grant research and ask whether one is researched.
+#   Compiled against Vok.jar alone (javac needs nothing of ToT or Ashlib for the calls it makes).
 BRIDGES=(
   "magiclib|MagicLib*/jars/MagicLib.jar|MagicLib*/jars/MagicLib-Kotlin.jar|LazyLib*/jars/internal/Kotlin-Runtime.jar|LazyLib*/jars/LazyLib.jar"
   "lunalib|LunaLib*/jars/LunaLib.jar|LazyLib*/jars/internal/Kotlin-Runtime.jar|LazyLib*/jars/LazyLib.jar"
   "nexerelin|Nexerelin*/jars/ExerelinCore.jar|LazyLib*/jars/internal/Kotlin-Runtime.jar|LazyLib*/jars/LazyLib.jar"
+  "vok|*Vaults of Knowledge*/jars/Vok.jar"
 )
 
 find_jar() { # newest match of a glob under STARSECTOR_MODS, or nothing
@@ -49,6 +54,7 @@ find_tool() {
 JAVAC="$(find_tool javac)"
 JAR="$(find_tool jar)"
 JAVA="$(find_tool java)"
+JDEPS="$(find_tool jdeps)"
 
 for j in starfarer.api.jar json.jar log4j-1.2.9.jar lwjgl.jar lwjgl_util.jar; do
   [ -f "$STARSECTOR_CORE/$j" ] || { echo "Missing $STARSECTOR_CORE/$j (set STARSECTOR_CORE)" >&2; exit 1; }
@@ -60,6 +66,7 @@ case "$(uname -s)" in
     MOD_DIR="$(cygpath -m "$MOD_DIR")"
     mkdir -p "$BUILD_DIR"; BUILD_DIR="$(cd "$BUILD_DIR" && cygpath -m "$(pwd)")"
     STARSECTOR_CORE="$(cygpath -m "$STARSECTOR_CORE")"
+    mkdir -p "$(dirname "$JAR_OUT")"; JAR_OUT="$(cygpath -m "$JAR_OUT")"
     ;;
 esac
 GAME_CP="$STARSECTOR_CORE/starfarer.api.jar${SEP}$STARSECTOR_CORE/json.jar${SEP}$STARSECTOR_CORE/log4j-1.2.9.jar${SEP}$STARSECTOR_CORE/lwjgl.jar${SEP}$STARSECTOR_CORE/lwjgl_util.jar"
@@ -97,9 +104,23 @@ for entry in "${BRIDGES[@]+"${BRIDGES[@]}"}"; do
   echo "   built $name"
 done
 
-echo "== packaging jars/SagaLib.jar"
-rm -f "$MOD_DIR/jars/SagaLib.jar"
-"$JAR" cf "$MOD_DIR/jars/SagaLib.jar" -C "$BUILD_DIR/classes" .
+echo "== packaging $(basename "$JAR_OUT")"
+mkdir -p "$(dirname "$JAR_OUT")"
+rm -f "$JAR_OUT"
+"$JAR" cf "$JAR_OUT" -C "$BUILD_DIR/classes" .
+
+# Only a bridge's own classes may name another mod's classes (src-optional/README.md): the game
+# loads every other SagaLib class without those mods. jdeps lists each class's dependencies.
+echo "== bridge isolation (jdeps)"
+"$JDEPS" -verbose:class "$JAR_OUT" > "$BUILD_DIR/jdeps.txt"
+LEAKS="$(awk '$2 == "->" && $1 !~ /\.jar$/ {
+  src = $1; dst = $3
+  if (dst ~ /^(java|javax|jdk|sun|com\.fs|org\.json|org\.apache\.log4j|org\.lwjgl|lastai\.sagalib)\./) next
+  if (dst ~ /^data\.kaysaar\./ && src !~ /^lastai\.sagalib\.bridge\.vok\./) { print src " -> " dst; next }
+  if (src !~ /^lastai\.sagalib\.bridge\./) print src " -> " dst
+}' "$BUILD_DIR/jdeps.txt")"
+if [ -n "$LEAKS" ]; then echo "   classes outside a bridge name another mod's classes:" >&2; echo "$LEAKS" >&2; exit 1; fi
+echo "   only the bridges name other mods' classes"
 
 if [ "${1:-}" != "--no-test" ]; then
   echo "== testing (Java)"

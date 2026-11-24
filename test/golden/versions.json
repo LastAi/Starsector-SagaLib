@@ -1,5 +1,5 @@
 {
-  "name": "SagaLib 1.3 versions by installed mods: resolution (2 optional mods, 4 combinations, inheritance, a conflict), choosing at new game, a mod added or removed later changes nothing",
+  "name": "SagaLib 1.3 versions by installed mods: resolution (2 optional mods, 4 combinations, inheritance, a conflict), choosing at new game, a mod added or removed later changes nothing; SagaLib 1.4 settingsWith: versions by a setting recorded at new game, kept when the setting changes later",
   "quests": [],
   "phrases": [],
   "modLists": [
@@ -15,6 +15,13 @@
     }
   ],
   "enabled": [],
+  "settings": {
+    "mod": "sfa",
+    "rows": [
+      { "fieldID": "sfa_hard", "fieldName": "Hard mode", "fieldType": "Boolean", "defaultValue": "false" },
+      { "fieldID": "sfa_route", "fieldName": "Route", "fieldType": "Radio", "defaultValue": "North", "secondaryValue": "North,South,East" }
+    ]
+  },
   "versioned": [
     {
       "kind": "person",
@@ -65,6 +72,33 @@
         "scripted": { "sfa_f": [] },
         "versions": [
           { "id": "mod1", "modsWith": ["mod1"], "set": { "relations.sfa_f.hegemony": -0.5, "scripted.sfa_f": [ { "op": "set", "path": "displayName", "value": "Reyes Free Port" } ] } }
+        ]
+      }
+    },
+    {
+      "kind": "encounter",
+      "owner": "sfa",
+      "item": {
+        "id": "sfa_ambush",
+        "text": "Pirates.",
+        "fleet": { "faction": "pirates", "points": 40 },
+        "versions": [
+          { "id": "setting:sfa_hard=true", "settingsWith": ["sfa_hard=true"], "set": { "fleet.points": 80 } },
+          { "id": "setting:sfa_route=South", "settingsWith": ["sfa_route=South"], "set": { "text": "Pirates from the south." } },
+          { "id": "mod1+setting:sfa_hard=true", "modsWith": ["mod1"], "settingsWith": ["sfa_hard=true"], "set": { "fleet.faction": "mod1_raiders", "fleet.points": 90 } },
+          { "id": "mod1", "modsWith": ["mod1"], "set": { "fleet.points": 50 } }
+        ]
+      }
+    },
+    {
+      "kind": "quest",
+      "owner": "sfa",
+      "item": {
+        "id": "sfa_trip",
+        "title": "The trip",
+        "stages": [ { "id": "go", "journal": "Go north." } ],
+        "versions": [
+          { "id": "setting:sfa_route=South", "settingsWith": ["sfa_route=South"], "set": { "stages[go].journal": "Go south." } }
         ]
       }
     }
@@ -140,6 +174,59 @@
     { "choose": true },
     { "enabled": ["mod2"] },
     { "record": true, "notices": ["sfa:mod1:removed"] },
-    { "choose": true, "expect": { "$global.sagaforge_ver_person_sfa_reyes": "mod1+mod2", "$global.sfv_sfa_meet_mod1": "true" } }
+    { "choose": true, "expect": { "$global.sagaforge_ver_person_sfa_reyes": "mod1+mod2", "$global.sfv_sfa_meet_mod1": "true" } },
+
+    { "resolve": "encounter:sfa_ambush", "on": [], "conflicts": [],
+      "is": { "id": "sfa_ambush", "text": "Pirates.", "fleet": { "faction": "pirates", "points": 40 } } },
+    { "resolve": "encounter:sfa_ambush", "on": ["setting:sfa_hard=true"], "conflicts": [],
+      "is": { "id": "sfa_ambush", "text": "Pirates.", "fleet": { "faction": "pirates", "points": 80 } } },
+    { "resolve": "encounter:sfa_ambush", "on": ["mod1"], "conflicts": [],
+      "is": { "id": "sfa_ambush", "text": "Pirates.", "fleet": { "faction": "pirates", "points": 50 } } },
+    { "resolve": "encounter:sfa_ambush", "on": ["mod1", "setting:sfa_hard=true"], "conflicts": [],
+      "is": { "id": "sfa_ambush", "text": "Pirates.", "fleet": { "faction": "mod1_raiders", "points": 90 } } },
+    { "resolve": "encounter:sfa_ambush", "on": ["setting:sfa_hard=true", "setting:sfa_route=South"], "conflicts": [],
+      "is": { "id": "sfa_ambush", "text": "Pirates from the south.", "fleet": { "faction": "pirates", "points": 80 } } },
+    { "resolve": "encounter:sfa_ambush", "on": ["setting:sfa_hard=false", "setting:sfa_route=East"], "conflicts": [],
+      "is": { "id": "sfa_ambush", "text": "Pirates.", "fleet": { "faction": "pirates", "points": 40 } } },
+
+    { "newGame": true },
+    { "enabled": ["mod1"] },
+    { "record": true, "notices": [] },
+    { "recordSettings": { "sfa_hard": "true" } },
+    { "choose": true, "expect": {
+      "$global.sagaforge_setting_sfa_hard": "true", "$global.sagaforge_setting_sfa_route": "North",
+      "$global.sagaforge_ver_encounter_sfa_ambush": "mod1+setting:sfa_hard=true", "$global.sagaforge_ver_quest_sfa_trip": "base",
+      "$global.sfv_sfa_trip_setting_sfa_route_South": "undefined" } },
+    { "chosen": "encounter:sfa_ambush",
+      "is": { "id": "sfa_ambush", "text": "Pirates.", "fleet": { "faction": "mod1_raiders", "points": 90 } } },
+    { "settings": { "sfa_hard": "false", "sfa_route": "South" } },
+    { "recordSettings": { "sfa_hard": "false", "sfa_route": "South" } },
+    { "choose": true, "expect": {
+      "$global.sfa_hard": "false", "$global.sfa_route": "South",
+      "$global.sagaforge_setting_sfa_hard": "true", "$global.sagaforge_setting_sfa_route": "North",
+      "$global.sagaforge_ver_encounter_sfa_ambush": "mod1+setting:sfa_hard=true", "$global.sagaforge_ver_quest_sfa_trip": "base" } },
+    { "chosen": "quest:sfa_trip",
+      "is": { "id": "sfa_trip", "title": "The trip", "stages": [ { "id": "go", "journal": "Go north." } ] } },
+
+    { "newGame": true },
+    { "enabled": [] },
+    { "record": true, "notices": [] },
+    { "recordSettings": { "sfa_route": "South" } },
+    { "choose": true, "expect": {
+      "$global.sagaforge_setting_sfa_hard": "false", "$global.sagaforge_setting_sfa_route": "South",
+      "$global.sagaforge_ver_encounter_sfa_ambush": "setting:sfa_route=South", "$global.sagaforge_ver_quest_sfa_trip": "setting:sfa_route=South",
+      "$global.sfv_sfa_trip_setting_sfa_route_South": "true" } },
+    { "chosen": "quest:sfa_trip",
+      "is": { "id": "sfa_trip", "title": "The trip", "stages": [ { "id": "go", "journal": "Go south." } ] } },
+    { "chosen": "encounter:sfa_ambush",
+      "is": { "id": "sfa_ambush", "text": "Pirates from the south.", "fleet": { "faction": "pirates", "points": 40 } } },
+
+    { "newGame": true },
+    { "enabled": [] },
+    { "record": true, "notices": [] },
+    { "recordSettings": {} },
+    { "choose": true, "expect": {
+      "$global.sagaforge_setting_sfa_hard": "false", "$global.sagaforge_setting_sfa_route": "North",
+      "$global.sagaforge_ver_encounter_sfa_ambush": "base", "$global.sagaforge_ver_quest_sfa_trip": "base" } }
   ]
 }

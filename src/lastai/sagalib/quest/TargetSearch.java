@@ -4,17 +4,22 @@ import com.fs.starfarer.api.Global;
 import com.fs.starfarer.api.campaign.FactionAPI;
 import com.fs.starfarer.api.campaign.SectorEntityToken;
 import com.fs.starfarer.api.campaign.StarSystemAPI;
+import com.fs.starfarer.api.campaign.econ.CommodityOnMarketAPI;
+import com.fs.starfarer.api.campaign.econ.CommoditySpecAPI;
 import com.fs.starfarer.api.campaign.econ.MarketAPI;
 import com.fs.starfarer.api.impl.campaign.missions.hub.HubMissionWithSearch;
 import com.fs.starfarer.api.impl.campaign.missions.hub.ReqMode;
 import com.fs.starfarer.api.util.Misc;
 import lastai.sagalib.SagaLog;
+import lastai.sagalib.core.Commodities;
 import lastai.sagalib.core.Memory;
 import lastai.sagalib.core.Targets;
 import lastai.sagalib.model.QuestDef;
 import org.lwjgl.util.vector.Vector2f;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * SagaLib 1.2: runs a quest's random-target searches with vanilla's own HubMissionWithSearch
@@ -40,8 +45,15 @@ final class TargetSearch {
                 return false;
             }
             if (t.systemFirst) m.searchMakeSystemPreferencesMoreImportant(true);
+            // SagaLib 1.4 (task #75): which commodities, as one more requirement on vanilla's commodity search
+            if ("commodity".equals(t.pick)) onlyThese(m, Commodities.allowed(t.commodity));
             Object picked;
-            if ("system".equals(t.pick)) picked = m.pickSystem();
+            CommodityOnMarketAPI com = null;
+            if ("commodity".equals(t.pick)) {
+                com = m.pickCommodity();
+                picked = com == null ? null : com.getMarket();
+            }
+            else if ("system".equals(t.pick)) picked = m.pickSystem();
             else if ("planet".equals(t.pick)) picked = m.pickPlanet();
             else if ("entity".equals(t.pick)) picked = m.pickEntity();
             else picked = m.pickMarket();
@@ -51,6 +63,7 @@ final class TargetSearch {
                 return false;
             }
             store(q.id, t.var, picked, giverLoc, mem);
+            if (com != null) storeCommodity(q.id, t, com, mem);
             if (t.person != null && !person(m, q, t, picked, mem)) return false;
         }
         return true;
@@ -70,6 +83,28 @@ final class TargetSearch {
         mem.set(Targets.factKey(q.id, t.var, Targets.PERSON_NAME), p.getNameString());
         SagaLog.info("quest " + q.id + ": target " + t.var + " person = " + p.getId() + " (" + p.getNameString() + ", " + p.getPostId() + ")");
         return true;
+    }
+
+    /** Only these commodity ids (null = any economy commodity: vanilla already skips meta and nonecon ones). */
+    private static void onlyThese(HubMissionWithSearch m, List<String> ids) {
+        if (ids == null) return;
+        final Set<String> ok = new HashSet<String>(ids);
+        m.getSearch().commodityReqs.add(new HubMissionWithSearch.CommodityRequirement() {
+            public boolean commodityMatchesRequirement(CommodityOnMarketAPI c) { return ok.contains(c.getId()); }
+        });
+    }
+
+    /** SagaLib 1.4 (task #75): the commodity's facts; its econUnit is read now, so the amount follows ToT's or another mod's units. */
+    private static void storeCommodity(String quest, QuestDef.Target t, CommodityOnMarketAPI com, Memory mem) {
+        CommoditySpecAPI spec = com.getCommodity();
+        MarketAPI mk = com.getMarket();
+        String name = spec == null ? com.getId() : spec.getLowerCaseName();
+        float econUnit = spec == null ? 1f : spec.getEconUnit();
+        float price = spec == null ? 0f : spec.getBasePrice();
+        int size = mk == null ? 1 : mk.getSize();
+        Commodities.store(mem, quest, t.var, t.commodity, com.getId(), name, econUnit, price, size);
+        SagaLog.info("quest " + quest + ": target " + t.var + " commodity = " + com.getId() + " x" + Commodities.amount(mem, quest, t.var)
+                + " (econUnit " + econUnit + ", base price " + price + ", market size " + size + ")");
     }
 
     private static void store(String quest, String var, Object picked, Vector2f giverLoc, Memory mem) {
@@ -220,6 +255,20 @@ final class TargetSearch {
         else if ("mkNotHidden".equals(id)) { if (r) m.requireMarketNotHidden(); else m.preferMarketNotHidden(); }
         else if ("mkConditions".equals(id)) { if (r) m.requireMarketConditions(mode(c, 0), list(c, 1)); else m.preferMarketConditions(mode(c, 0), list(c, 1)); }
         else if ("mkIndustries".equals(id)) { if (r) m.requireMarketIndustries(mode(c, 0), list(c, 1)); else m.preferMarketIndustries(mode(c, 0), list(c, 1)); }
+        // SagaLib 1.4 (task #75): the commodity at the market; production, shortage and surplus as yes/no only
+        else if ("cmNotPersonnel".equals(id)) { if (r) m.requireCommodityIsNotPersonnel(); else m.preferCommodityIsNotPersonnel(); }
+        else if ("cmLegal".equals(id)) { if (r) m.requireCommodityLegal(); else m.preferCommodityLegal(); }
+        else if ("cmIllegal".equals(id)) { if (r) m.requireCommodityIllegal(); else m.preferCommodityIllegal(); }
+        else if ("cmTags".equals(id)) { if (r) m.requireCommodityTags(mode(c, 0), list(c, 1)); else m.preferCommodityTags(mode(c, 0), list(c, 1)); }
+        else if ("cmPriceAtLeast".equals(id)) { if (r) m.requireCommodityBasePriceAtLeast(num(c, 0)); else m.preferCommodityBasePriceAtLeast(num(c, 0)); }
+        else if ("cmPriceAtMost".equals(id)) { if (r) m.requireCommodityBasePriceAtMost(num(c, 0)); else m.preferCommodityBasePriceAtMost(num(c, 0)); }
+        else if ("cmProduced".equals(id)) { if (r) m.requireCommodityProductionAtLeast(1); else m.preferCommodityProductionAtLeast(1); }
+        else if ("cmNotProduced".equals(id)) { if (r) m.requireCommodityProductionAtMost(0); else m.preferCommodityProductionAtMost(0); }
+        else if ("cmShort".equals(id)) { if (r) m.requireCommodityDeficitAtLeast(1); else m.preferCommodityDeficitAtLeast(1); }
+        else if ("cmNotShort".equals(id)) { if (r) m.requireCommodityDeficitAtMost(0); else m.preferCommodityDeficitAtMost(0); }
+        else if ("cmSurplus".equals(id)) { if (r) m.requireCommoditySurplusAtLeast(1); else m.preferCommoditySurplusAtLeast(1); }
+        else if ("cmNoSurplus".equals(id)) { if (r) m.requireCommoditySurplusAtMost(0); else m.preferCommoditySurplusAtMost(0); }
+        else if ("cmInStock".equals(id)) { if (r) m.requireCommodityAvailableAtLeast((int) num(c, 0)); else m.preferCommodityAvailableAtLeast((int) num(c, 0)); }
         else SagaLog.warnOnce("crit:" + id, owner + ": unknown target criterion " + id);
     }
 }

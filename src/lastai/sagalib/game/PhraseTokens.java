@@ -8,6 +8,7 @@ import com.fs.starfarer.api.campaign.rules.RulesAPI;
 import com.fs.starfarer.api.characters.PersonAPI;
 import lastai.sagalib.SagaLog;
 import lastai.sagalib.core.Conditions;
+import lastai.sagalib.core.Names;
 import lastai.sagalib.core.Phrases;
 import lastai.sagalib.model.PhraseDef;
 
@@ -50,7 +51,13 @@ public final class PhraseTokens implements RuleTokenReplacementGeneratorPlugin {
             Map<String, String> raw = new HashMap<String, String>();
             for (PhraseDef p : phrases.values()) {
                 try {
-                    raw.put(p.token, Phrases.text(p, conditions, random));
+                    String text = Phrases.text(p, conditions, random);
+                    // SagaLib 1.4 (task #79): a one-name person's $<id>_firstName is their one name
+                    if ((text == null || text.trim().isEmpty()) && p.token.endsWith("_firstName")) {
+                        String[] n = nameOf(p.owner);
+                        if (n != null) text = Names.firstNamePhrase(p.token, p.owner, text, n[0], n[1]);
+                    }
+                    raw.put(p.token, text);
                 } catch (Throwable t) {
                     SagaLog.errorOnce("phrase:" + p.token, "phrase " + p.token + " (" + p.source + ") failed; it shows as empty text", t);
                     raw.put(p.token, "");
@@ -88,6 +95,19 @@ public final class PhraseTokens implements RuleTokenReplacementGeneratorPlugin {
             if (out.contains(tok)) out = out.replace(tok, nested(raw.get(tok), raw, tokens, depth + 1));
         }
         return out;
+    }
+
+    /** A person's {first, last} as the game has them (ImportantPeople), else as the content defines them; null when unknown. */
+    static String[] nameOf(String id) {
+        if (id == null || id.isEmpty()) return null;
+        try {
+            PersonAPI p = Global.getSector().getImportantPeople().getPerson(id);
+            if (p != null && p.getName() != null) return new String[]{p.getName().getFirst(), p.getName().getLast()};
+        } catch (Throwable ignored) {
+            // no sector (yet): the content's definition
+        }
+        lastai.sagalib.model.PersonDef d = Saga.content().people.get(id);
+        return d == null ? null : new String[]{d.firstName, d.lastName};
     }
 
     static SectorEntityToken target(Object entity) {

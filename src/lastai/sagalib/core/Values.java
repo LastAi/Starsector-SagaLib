@@ -15,6 +15,25 @@ public final class Values {
     private static final Pattern ANY_NUMBER = Pattern.compile("[-+]?(\\d+\\.?\\d*|\\.\\d+)([eE][-+]?\\d+)?");
 
     /** A literal from a rule line: "true"/"false", a number (as Float), else the string without quotes. */
+    private static final Pattern GLOBAL_TOKEN = Pattern.compile("\\$global\\.[A-Za-z0-9_]+");
+
+    /**
+     * SagaLib 1.4 (task #75, found in game): fills $global.&lt;key&gt; tokens from memory in a text
+     * shown outside a dialog (the intel's journal, next step and offer text), the way the dialog's
+     * token replacement does. A key that isn't set stays as it is.
+     */
+    public static String fillGlobals(Memory m, String text) {
+        if (text == null || text.indexOf("$global.") < 0) return text;
+        java.util.regex.Matcher x = GLOBAL_TOKEN.matcher(text);
+        StringBuffer out = new StringBuffer();
+        while (x.find()) {
+            Object v = m.get(x.group());
+            x.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(v == null ? x.group() : str(v)));
+        }
+        x.appendTail(out);
+        return out.toString();
+    }
+
     public static Object literal(String s) {
         String t = s.trim();
         if (t.length() >= 1 && t.startsWith("\"")) t = t.substring(1);

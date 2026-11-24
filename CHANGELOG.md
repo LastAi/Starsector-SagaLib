@@ -1,5 +1,98 @@
 # Changelog
 
+## 1.4.0 (2026-11-24)
+
+For Starsector **0.98a and 0.98.5a**. Format 1, all additive: content without the new keys behaves
+exactly as with 1.3. Built for Saga Forge tasks #75, #77, #79 (plugins, one-name characters) and #67
+(fights, quiet ops, encounter outcomes, hails, mixed fleets, versions by gender or setting). In-game
+checks on 0.98a-RC8 (Saga Forge `docs/INGAME-CHECKS.md`): #75 passed in vanilla, with
+Industrial.Evolution and with AoTD ToT (2026-11-19); #77 and #79 passed. **Released as a
+pre-release:** #67's checks ("Task #67", (a)–(n)) are still open.
+
+- **Encounter outcome actions** (Saga Forge #67 U46): an encounter file's `outcomes` may carry
+  `defeatedActions` / `avoidedActions` (quiet ops, as progress stages), run by its `defeated` /
+  `avoided` trigger (`SF_enc_<id>_defeated` / `_avoided`, a quiet trigger like `SF_event_`). When an
+  encounter has its own trigger and a quest lists it too, **both** fire now, the encounter's first
+  (before, the encounter's own replaced the quest's).
+- **Fleets that hail and let go** (Saga Forge #67 U43): `SF_Despawn` without an encounter id
+  despawns the fleet the dialog is with (a comm dialog's "let them go"). Encounter flags (hostile,
+  aggressive, allow and prevent disengage) are set with the reason `sagaforge`
+  (`Misc.setFlagWithReason`), so rules can lift them per reason, and a fleet that withdraws clears its
+  block on leaving.
+- **Mixed fleets** (Saga Forge #67 U40): an explicit fleet's `randomPoints` adds ships drawn by vanilla's
+  FleetFactoryV3 for that many points (scaled by `sizeScale` like fleet points), and any fleet's
+  `extras` (`[{"chance": 0.3, "pick": "all" | n, "ships": ["variant" | {"variant", "weight"}]}]`) may
+  add ships at each spawn: a group joins with its chance and adds all its ships or n drawn by weight.
+- **Versions by the player's gender** (Saga Forge #67 U37): `settingsWith: ["player_gender=FEMALE"]`
+  (or `MALE`). The player's gender is recorded once per save, when the game starts (before versions
+  are chosen), and never changes; a person, quest, encounter, system, event scheduler or pool can
+  have a version for a male or a female player (a female John Starsector for a female captain).
+- **Commodity targets** (docs/FORMAT.md, "Commodity targets"): a random target with the pick
+  `commodity`, a commodity at a market, through vanilla's `pickCommodity()`. 13 new criteria
+  (`cm…`: not personnel, legal / illegal, tags, base price, and yes/no only for production,
+  shortage and surplus, plus "at least N in stock"); `commodity.which` = the 18 vanilla goods
+  (default), any economy commodity, or a list; `commodity.amount` in economy units (× the
+  commodity's `econUnit` when picked, optionally × the market's size) or cargo units.
+- Stored with the market's facts: `_commodity`, `_commodityId`, `_amount`, `_basePrice`, `_value`
+  (whole numbers).
+- **`SF_TargetCommodity <quest> <var> has|take|give|credits [mult]`**: the cargo check, taking or
+  giving the goods, and credits as a multiple of base price × amount.
+- A reward's **`targetCredits`** (`{"var", "mult"}`): credits for a commodity target's goods.
+- A scatter with the pick `commodity` is a load error.
+- **AoTD Vaults of Knowledge research** (task #77; docs/FORMAT.md, "Vaults of Knowledge research"):
+  a fourth optional bridge, `src-optional/vok` (`VokBridge`, compiled against VoK 5.0.7's `Vok.jar`;
+  build.sh says "built vok"). **`SF_GrantResearch <techId>`** gives the player's faction a tech as
+  researched (VoK's own `research_tech` steps, a "Research completed" line in the dialog);
+  **`SF_HasResearch <techId> [faction]`** asks VoK. Without VoK granting does nothing (logged once)
+  and the condition is false. The dev menu's Mods page shows the bridge's state.
+- build.sh: `JAR_OUT` builds the jar elsewhere (tests), and a **jdeps step** fails the build when a
+  class outside `src-optional` names another mod's class.
+- **Plugins: a content mod's own Java** (task #79; docs/FORMAT.md, "Plugins"): the stable API
+  `lastai.sagalib.api.SagaPlugin` (`String run(SagaPluginContext ctx, Map<String,String> args)`) and
+  `SagaPluginContext` (quest and node ids, rule id, the dialog and memory map, `addText`).
+  **`SF_RunPlugin <className> ["quest=<q>" "node=<n>"] ["key=value" …]`** (each pair quoted: the game refuses an unquoted `=` in a command line at load) creates the class fresh each call
+  (vanilla's `getInstanceOfScript`), runs it, and stores its result in `$global.<q>_<n>_result`
+  (`$sagaforge_plugin_result` without quest and node). A missing class, a class that isn't a plugin
+  or an exception in it logs one error line and counts as no result; the game keeps running.
+  Golden case `test/golden/plugins.json`.
+- **One-name characters** (task #79; docs/FORMAT.md, "One-name characters"): a person file's
+  `"oneName": true` keeps the one name in the last-name slot. For any one-name active person (first
+  name blank, last name not: any mod's) the new token generator `OneNameTokens` fills
+  `$personFirstName` and `$PersonFirstName` with the one name, where vanilla leaves them empty; it is
+  registered in `onGameLoad`, after vanilla's, so its value wins. A one-name person's blank
+  `$<id>_firstName` phrase falls back to the one name. Golden case `test/golden/names.json`.
+- **Fights** (Saga Forge #67 U3; docs/FORMAT.md, "Fights"): **`SF_Fight <quest> <node>`** fights the
+  fleet of the quest's new optional `fights` entry in the open dialog, the way vanilla's salvage
+  defenders are fought (vanilla's fleet-interaction plugin with SalvageDefenderInteraction's config,
+  no Omega / derelict AI-core extras), then fires the fight's `won` trigger (a win; no rule: back to
+  the place's menu) or `left` trigger (left or lost; no rule: the dialog closes) in the same dialog.
+  A damaged fleet the player left is kept for 10 days under the place's
+  `$sagaforge_fight_<quest>_<node>` (new saved script class `lastai.sagalib.game.FightFleetScript`).
+  `fleet` has an encounter's fleet shape (shared parser `EncounterDef.parseFleet`, shared builder
+  `EncounterManager.build`); a win counts a named fleet's defeats and may retire its captain.
+  `size: "template"` with `variants` is read as `explicit` (encounters too).
+- **Quiet ops** (Saga Forge #67 U12; docs/FORMAT.md, "Quiet ops"): a world event entry's
+  `start` / `end` and a progress stage's or outcome's `actions` may be an op list (`set`, `unset`,
+  `credits`, `item`, `rep`, `spawn`, `despawn`, `placeEntity`, `removeEntity`, `startQuest`,
+  `storyPoints`, `xp`, `progress`, `plugin`). SagaLib runs it itself, without the dialog that
+  flashed open and shut, through the same methods as the rule commands; gains and losses show as
+  vanilla campaign messages. Without the list the trigger fires in a dialog as before. A failing op
+  is logged and the others run. `Memory` got `set(key, value, days)`.
+- **Versions by a setting fixed at new game** (Saga Forge #67 U18; docs/FORMAT.md, "Versions by
+  installed mods" and "Mod settings"): a version's **`settingsWith: ["<id>=<value>"]`** needs that
+  value of one of the content mods' LunaLib settings, compared with the value **recorded when the
+  game started**: `$global.sagaforge_setting_<fieldID>` (text: `true`, `Hard`, `5`), written once
+  per save for every value field (at a new game before versions are chosen; on the first load of a
+  save from before 1.4, with the values then) and never changed, so a change in LunaLib's menu later
+  doesn't switch the save's versions (`$global.<fieldID>` still follows the menu). Inside SagaLib the
+  need is the token `setting:<id>=<value>`, so the stored choice reads e.g.
+  `mod1+setting:sfa_hard=true` and a quest gets `$global.sfv_<quest>_setting_<id>_<value>`.
+  Specificity counts `settingsWith`. An entry without `=` or with `+` is a load error and that
+  version never applies; a setting no content mod has (nothing recorded) never holds, logged once.
+  The limit of 6 mods per item becomes at most 64 combinations once setting values are named. Dev
+  menu › Mod settings shows each value at the start of the game. Golden case `versions.json` has
+  steps `recordSettings` (a new `Settings.record`).
+
 ## 1.3.0 (2026-11-19)
 
 For Starsector **0.98a and 0.98.5a**. Format 1, all additive (docs/FORMAT.md, "Other mods and mod

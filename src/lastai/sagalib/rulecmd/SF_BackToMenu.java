@@ -24,6 +24,11 @@ public class SF_BackToMenu extends SagaCommand {
 
     @Override
     protected boolean run(String ruleId, InteractionDialogAPI dialog, List<String> args, List<Token> params, Map<String, MemoryAPI> memoryMap) {
+        return back(ruleId, dialog, memoryMap);
+    }
+
+    /** The place's menu again, or the dialog closes when nothing adds an option. Also SF_Fight's after a won fight with no rule. */
+    public static boolean back(String ruleId, InteractionDialogAPI dialog, Map<String, MemoryAPI> memoryMap) {
         if (dialog == null) return false;
         dialog.getOptionPanel().clearOptions();
         FireAll.fire(ruleId, dialog, memoryMap, "PopulateOptions");

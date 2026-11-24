@@ -33,6 +33,23 @@ public final class EventLogic {
 
     public static String endTrigger(String event) { return "SF_event_" + event + "_end"; }
 
+    /** A progress event's stage trigger (with outcomes: the picked outcome's). */
+    public static String progressTrigger(String event, String stage, String outcome) {
+        return "SF_progress_" + event + "_" + stage + (outcome == null ? "" : "_" + outcome);
+    }
+
+    /**
+     * SagaLib 1.4: the op list SagaLib runs for a trigger it fired (a world event's start / end), or
+     * null: no such event, or its actions are rules (fire the trigger in a dialog, as before).
+     */
+    public static java.util.List<QuietOps.Op> quietOps(lastai.sagalib.model.EventsDef d, String trigger) {
+        for (lastai.sagalib.model.EventsDef.Event e : d.events.values()) {
+            if (startTrigger(e.id).equals(trigger)) return e.start;
+            if (endTrigger(e.id).equals(trigger)) return e.end;
+        }
+        return null;
+    }
+
     /** What a tick did: an event started or ended. */
     public static final class Change {
         public final String event;

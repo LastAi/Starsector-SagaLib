@@ -96,6 +96,9 @@ public final class DevMenu implements InteractionDialogPlugin {
         // SagaLib 1.3 (task #59): the guarded MagicLib bridge
         String bridge = lastai.sagalib.game.MagicBounties.status();
         text.addPara("MagicLib bounties: " + (bridge.isEmpty() ? "bridge ready (quests can start and check MagicLib bounties)" : bridge + " (quests see every bounty as unavailable)"));
+        // SagaLib 1.4 (task #77): the guarded Vaults of Knowledge bridge
+        String vok = lastai.sagalib.game.VokResearch.status();
+        text.addPara("Vaults of Knowledge research: " + (vok.isEmpty() ? "bridge ready (quests can grant and check research)" : vok + " (quests grant no research and see none)"));
         if (lastai.sagalib.core.Mods.lists().isEmpty()) text.addPara("No content mod lists other mods (data/sagaforge/mods.json).");
         for (lastai.sagalib.core.Mods.ModList l : lastai.sagalib.core.Mods.lists().values()) {
             StringBuilder b = new StringBuilder(l.name + " (" + l.owner + "):");
@@ -135,6 +138,9 @@ public final class DevMenu implements InteractionDialogPlugin {
                 b.append("\n  ").append(f.key()).append(" (").append(f.type).append(") = ").append(lastai.sagalib.core.Values.str(mem.get(f.key())))
                         .append(a == null ? ", not applied yet" : a.fromPlayer ? ", from LunaLib" : ", default")
                         .append(" (default ").append(lastai.sagalib.core.Values.str(f.def)).append(')');
+                // SagaLib 1.4: the value at the start of this game (versions by a setting use it)
+                String rec = lastai.sagalib.core.Settings.recorded(mem, f.id);
+                b.append(rec == null ? "; not recorded" : "; at the start of this game " + rec);
             }
             text.addPara(b.toString());
         }

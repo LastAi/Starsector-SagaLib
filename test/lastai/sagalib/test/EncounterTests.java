@@ -60,6 +60,19 @@ public final class EncounterTests {
     }
 
     /** SagaLib 1.1: a named fleet's ship names, flagship, template and captain rule are read; defeats are counted. */
+    /** SagaLib 1.4 (Saga Forge #67 U40): an explicit fleet's random part and extra groups. */
+    public static void mixedFleet() throws Exception {
+        EncounterDef e = enc("{'format':1,'id':'h','fleet':{'faction':'mercenary','size':'explicit','variants':['eagle_Assault'],'randomPoints':40,"
+                + "'extras':[{'chance':0.3,'pick':'all','ships':['hammerhead_Balanced','hammerhead_Elite']},{'chance':0.5,'pick':1,'ships':[{'variant':'condor_Support','weight':2},{'variant':'drover_Strike','weight':1}]}]},'spawn':{'at':'a'}}");
+        T.eq(40f, e.randomPoints, "the random part");
+        T.eq(2, e.extras.size(), "two extra groups");
+        T.eq(0.3f, e.extras.get(0).chance, "chance");
+        T.eq(0, e.extras.get(0).pick, "pick all");
+        T.eq(1, e.extras.get(1).pick, "pick one");
+        T.eq(2f, e.extras.get(1).weights.get(0), "a weight");
+        T.eq(0f, enc("{'format':1,'id':'p','fleet':{'faction':'pirates','size':'fp','points':80},'spawn':{'at':'a'}}").randomPoints, "none by default");
+    }
+
     public static void namedFleet() throws Exception {
         EncounterDef e = enc("{'format':1,'id':'amb','fleet':{'faction':'pirates','size':'explicit','variants':['wolf_Assault','hound_Standard'],"
                 + "'shipNames':['Thirty Days',''],'flagship':0,'template':'sfw_butters','captainDiesOnDefeat':true,'flagshipCommander':'sfw_butters'},"
@@ -165,11 +178,20 @@ public final class EncounterTests {
         T.eq("q_av", EncounterLogic.resolve(m, e, quests, false, 3), "avoided");
         EncounterDef own = enc("{'format':1,'id':'amb','fleet':{'faction':'pirates'},'spawn':{'at':'belt'},'outcomes':{'defeated':'own_def'}}");
         EncounterLogic.spawned(m, own, null, null);
-        T.eq("own_def", EncounterLogic.resolve(m, own, quests, true, 4), "the encounter's own outcome wins");
+        T.eq("own_def", EncounterLogic.resolve(m, own, quests, true, 4), "the encounter's own outcome first");
         EncounterLogic.spawned(m, own, null, null);
         T.eq("q_av", EncounterLogic.resolve(m, own, quests, false, 5), "falls back to the quest's for the other one");
+        // SagaLib 1.4 (#67 U46): both fire, the encounter's own first, then the quest's
+        EncounterLogic.spawned(m, own, null, null);
+        T.eq("[own_def, q_def]", String.valueOf(EncounterLogic.resolveAll(m, own, quests, true, 6)), "own outcome, then the quest's exit");
+        T.eq("[]", String.valueOf(EncounterLogic.resolveAll(m, own, quests, true, 7)), "once");
+        EncounterDef acts = enc("{'format':1,'id':'pat','fleet':{'faction':'hegemony'},'spawn':{'at':'belt'},'outcomes':{'defeated':'SF_enc_pat_defeated','defeatedActions':[{'op':'set','key':'$global.x_fought','value':'true'}]}}");
+        T.eq(1, acts.defeatedActions.size(), "outcome actions read");
+        T.eq(acts.defeatedActions, acts.quietOps("SF_enc_pat_defeated"), "quiet ops by trigger");
+        T.eq(null, acts.quietOps("SF_enc_pat_avoided"), "no avoided actions");
+        T.yes(lastai.sagalib.core.Triggers.quiet("SF_enc_pat_defeated"), "an encounter outcome runs quietly");
         T.eq(q, EncounterLogic.questFor(e, quests), "questFor");
-        T.eq("5", lastai.sagalib.core.Values.str(m.get(EncounterLogic.goneKey("amb"))), "gone day");
+        T.eq("6", lastai.sagalib.core.Values.str(m.get(EncounterLogic.goneKey("amb"))), "gone day (the last resolve)");
     }
 
     public static void readingErrors() throws Exception {

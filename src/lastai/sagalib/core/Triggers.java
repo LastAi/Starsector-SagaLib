@@ -42,7 +42,7 @@ public final class Triggers {
         return after(hasOptions, addedText, alreadyClosed);
     }
 
-    public static boolean quiet(String trigger) { return trigger != null && (trigger.startsWith("SF_event_") || trigger.startsWith("SF_progress_")); }
+    public static boolean quiet(String trigger) { return trigger != null && (trigger.startsWith("SF_event_") || trigger.startsWith("SF_progress_") || trigger.startsWith("SF_enc_")); }
 
     public static List<String> queued(Memory m) {
         List<String> out = new ArrayList<String>();

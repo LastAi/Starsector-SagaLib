@@ -154,8 +154,10 @@ public final class QuestLogic {
 
     /** SagaLib 1.3 (task #62): a reward's credits, scaled by its creditsScale setting when a memory is given. */
     public static long credits(QuestDef.Reward r, Memory mem) {
-        if (mem == null || r.creditsScale == null) return r.credits;
-        return Settings.credits(r.credits, r.creditsScale, mem);
+        // SagaLib 1.4 (task #75): plus mult x a commodity target's value; the setting scales only the plain credits
+        long goods = mem == null || r.targetCreditsVar == null || r.quest == null ? 0 : Commodities.credits(mem, r.quest, r.targetCreditsVar, r.targetCreditsMult);
+        if (mem == null || r.creditsScale == null) return r.credits + goods;
+        return Settings.credits(r.credits, r.creditsScale, mem) + goods;
     }
 
     /** Applies a reward in Play mode's order: credits, faction rep, person rep, items, loot (1.2), ships, XP, story points. */
@@ -166,7 +168,8 @@ public final class QuestLogic {
     /** SagaLib 1.3 (task #62): {@link #apply(QuestDef.Reward, Effects)} with the credits scaled by a setting. */
     public static void apply(QuestDef.Reward r, Effects fx, Memory mem) {
         long credits = credits(r, mem);
-        if (credits != r.credits) {
+        if (r.targetCreditsVar != null) SagaLog.info("reward " + r.id + ": " + r.targetCreditsMult + " x the value of target " + r.targetCreditsVar);
+        if (credits != r.credits && r.creditsScale != null) {
             SagaLog.info("reward " + r.id + ": " + r.credits + " credits scaled to " + credits + " by setting " + r.creditsScale.setting);
         }
         if (credits != 0) fx.credits(credits);

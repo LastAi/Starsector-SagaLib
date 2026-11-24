@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * SagaLib 1.2: random targets (docs/FORMAT.md "Random targets"). Pure part: the known picks and
+ * SagaLib 1.2: random targets (docs/FORMAT.md "Random targets"); 1.4 adds the pick "commodity" (core/Commodities). Pure part: the known picks and
  * criteria (the same ids as Saga Forge's shared/targets.ts and test/golden/target-criteria.json),
  * the memory keys, and references to a picked target. The search itself is vanilla's
  * HubMissionWithSearch, run by quest/TargetSearch in the game.
@@ -24,7 +24,7 @@ import java.util.Set;
 public final class Targets {
     private Targets() {}
 
-    public static final List<String> PICKS = Collections.unmodifiableList(Arrays.asList("system", "planet", "entity", "market"));
+    public static final List<String> PICKS = Collections.unmodifiableList(Arrays.asList("system", "planet", "entity", "market", "commodity"));
 
     public static final Set<String> CRITERIA = Collections.unmodifiableSet(new LinkedHashSet<String>(Arrays.asList(
             "sysTags", "sysInteresting", "sysUnexplored", "sysExplored", "sysNotEnteredFor", "sysInner", "sysFringe",
@@ -35,7 +35,10 @@ public final class Targets {
             "enType", "enTags", "enFlags", "enUndiscovered",
             "mkFaction", "mkFactionNot", "mkNotPlayer", "mkHostileTo", "mkNotHostileTo", "mkFactionCustom", "mkSizeAtLeast",
             "mkSizeAtMost", "mkStabilityAtLeast", "mkStabilityAtMost", "mkMilitary", "mkNotMilitary", "mkSpaceport",
-            "mkNotSpaceport", "mkHidden", "mkNotHidden", "mkConditions", "mkIndustries")));
+            "mkNotSpaceport", "mkHidden", "mkNotHidden", "mkConditions", "mkIndustries",
+            // SagaLib 1.4 (task #75): a commodity at a market; yes/no only for production, shortage and surplus
+            "cmNotPersonnel", "cmLegal", "cmIllegal", "cmTags", "cmPriceAtLeast", "cmPriceAtMost", "cmProduced",
+            "cmNotProduced", "cmShort", "cmNotShort", "cmSurplus", "cmNoSurplus", "cmInStock")));
 
     /** Criteria vanilla only has as "require" (no prefer variant): used as prefer, they are skipped with a warning. */
     public static final Set<String> REQUIRE_ONLY = Collections.unmodifiableSet(new LinkedHashSet<String>(Arrays.asList(

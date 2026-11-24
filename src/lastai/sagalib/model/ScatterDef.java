@@ -49,6 +49,7 @@ public final class ScatterDef {
         if (t == null) return null;
         s.target = QuestDef.parseTarget(r, new JsonReader.Indexed(t, "$.target"), false);
         if (s.target == null) return null;
+        if ("commodity".equals(s.target.pick)) { r.error("$.target.pick", "a scatter places objects: pick a system, planet, entity or market, not a commodity"); return null; }
         JSONObject e = r.obj(o, "entity", "$", true);
         if (e == null) return null;
         s.entityType = r.str(e, "type", "$.entity", true, null);

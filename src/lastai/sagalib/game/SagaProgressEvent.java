@@ -35,7 +35,7 @@ public class SagaProgressEvent extends BaseEventIntel {
     public static String stageKey(String id) { return "$global." + id + "_stage"; }
 
     public static String trigger(String event, String stage, String outcome) {
-        return "SF_progress_" + event + "_" + stage + (outcome == null ? "" : "_" + outcome);
+        return lastai.sagalib.core.EventLogic.progressTrigger(event, stage, outcome);
     }
 
     public static SagaProgressEvent get(String id) {
@@ -230,6 +230,20 @@ public class SagaProgressEvent extends BaseEventIntel {
     /** One-time points (SF_Progress) with the text shown in the factor list. */
     public void addPoints(int points, String desc, com.fs.starfarer.api.campaign.InteractionDialogAPI dialog) {
         addFactor(new SagaOneTimeFactor(points, desc), dialog);
+    }
+
+    /**
+     * SF_Progress and the quiet op "progress": one-time points for an event, starting it if it isn't
+     * running (unless it ended). False (logged) when the event isn't defined or has ended.
+     */
+    public static boolean oneTime(String event, int points, String desc, com.fs.starfarer.api.campaign.InteractionDialogAPI dialog, String where) {
+        SagaProgressEvent e = getOrStart(event);
+        if (e == null) {
+            SagaLog.warn(where + ": progress event \"" + event + "\" isn't defined or has ended");
+            return false;
+        }
+        e.addPoints(points, desc == null ? "" : desc, dialog);
+        return true;
     }
 
     @Override

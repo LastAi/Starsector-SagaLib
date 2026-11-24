@@ -22,6 +22,13 @@ public final class EncounterDef {
     /** SagaLib 1.3 (task #62): scales {@link #points} (size fp only) by a mod setting (null = never scaled). */
     public lastai.sagalib.core.Settings.Scale sizeScale;
     public final List<String> variants = new ArrayList<String>();
+    /**
+     * SagaLib 1.4 (Saga Forge #67 U40): an explicit fleet plus this many fleet points drawn like vanilla
+     * (FleetFactoryV3: the faction's doctrine and known ships); 0 = none.
+     */
+    public float randomPoints;
+    /** SagaLib 1.4 (#67 U40): extra groups that may join the fleet when it spawns (any size). */
+    public final List<lastai.sagalib.core.FleetExtras.Group> extras = new ArrayList<lastai.sagalib.core.FleetExtras.Group>();
     /** null = the faction's default quality. */
     public Float quality;
     public String flagshipCommander;
@@ -55,6 +62,12 @@ public final class EncounterDef {
     public String commDialog;
     public String defeated;
     public String avoided;
+    /**
+     * SagaLib 1.4 (Saga Forge #67 U46): the encounter's own outcome actions, run quietly by its
+     * {@link #defeated} / {@link #avoided} trigger (null = a rule on that trigger, if any).
+     */
+    public java.util.List<lastai.sagalib.core.QuietOps.Op> defeatedActions;
+    public java.util.List<lastai.sagalib.core.QuietOps.Op> avoidedActions;
     public String source;
     /** SagaLib 1.3: only with / only without these mods (modsWith, modsWithout, modsAny). */
     public lastai.sagalib.core.ModGate gate = lastai.sagalib.core.ModGate.NONE;
@@ -66,6 +79,14 @@ public final class EncounterDef {
     public String template;
     /** SagaLib 1.1: when the fleet is defeated, its captain (flagshipCommander) is gone for good. */
     public boolean captainDiesOnDefeat;
+
+    /** SagaLib 1.4: the quiet actions of one of this encounter's outcome triggers, or null. */
+    public java.util.List<lastai.sagalib.core.QuietOps.Op> quietOps(String trigger) {
+        if (trigger == null) return null;
+        if (trigger.equals(defeated)) return defeatedActions;
+        if (trigger.equals(avoided)) return avoidedActions;
+        return null;
+    }
 
     public boolean explicit() { return "explicit".equals(size); }
 
@@ -85,32 +106,7 @@ public final class EncounterDef {
         e.name = r.str(o, "name", "$", false, e.id);
         JSONObject f = r.obj(o, "fleet", "$", true);
         if (f == null) return null;
-        e.faction = r.str(f, "faction", "$.fleet", true, null);
-        if (e.faction == null) return null;
-        e.fleetType = r.str(f, "type", "$.fleet", false, "patrolMedium");
-        e.size = r.str(f, "size", "$.fleet", false, "fp");
-        if (!"fp".equals(e.size) && !"explicit".equals(e.size)) {
-            r.error("$.fleet.size", "unknown size \"" + e.size + "\" (fp or explicit)");
-            return null;
-        }
-        Double pts = r.num(f, "points", "$.fleet", 50d);
-        e.points = pts == null ? 50 : pts.floatValue();
-        e.sizeScale = lastai.sagalib.core.Settings.Scale.parse(f, "sizeScale", "$.fleet", r);
-        e.variants.addAll(r.strings(f, "variants", "$.fleet"));
-        if (e.explicit() && e.variants.isEmpty()) {
-            r.error("$.fleet.variants", "an explicit fleet needs at least one variant");
-            return null;
-        }
-        Double q = r.num(f, "quality", "$.fleet", null);
-        e.quality = q == null ? null : q.floatValue();
-        e.flagshipCommander = r.str(f, "flagshipCommander", "$.fleet", false, "");
-        e.fleetName = r.str(f, "name", "$.fleet", false, "");
-        e.shipNames.addAll(r.strings(f, "shipNames", "$.fleet"));
-        Double fs = r.num(f, "flagship", "$.fleet", -1d);
-        e.flagship = fs == null ? -1 : (int) Math.round(fs);
-        e.template = emptyToNull(r.str(f, "template", "$.fleet", false, ""));
-        Boolean cd = r.bool(f, "captainDiesOnDefeat", "$.fleet", false);
-        e.captainDiesOnDefeat = cd != null && cd;
+        if (!parseFleet(e, f, "$.fleet", r)) return null;
 
         JSONObject s = r.obj(o, "spawn", "$", true);
         if (s == null) return null;
@@ -165,8 +161,80 @@ public final class EncounterDef {
         if (out != null) {
             e.defeated = emptyToNull(r.str(out, "defeated", "$.outcomes", false, ""));
             e.avoided = emptyToNull(r.str(out, "avoided", "$.outcomes", false, ""));
+            e.defeatedActions = lastai.sagalib.core.QuietOps.parse(out, "defeatedActions", "$.outcomes", r);
+            e.avoidedActions = lastai.sagalib.core.QuietOps.parse(out, "avoidedActions", "$.outcomes", r);
+            if (e.defeatedActions != null && e.defeated == null) r.warn("$.outcomes.defeatedActions", "actions without a \"defeated\" trigger never run");
+            if (e.avoidedActions != null && e.avoided == null) r.warn("$.outcomes.avoidedActions", "actions without an \"avoided\" trigger never run");
         }
         return e;
+    }
+
+    /**
+     * An encounter's "fleet" object into {@code e} (also a quest fight's fleet, SagaLib 1.4). False
+     * (logged) when it can't make a fleet. {@code size} "template" with the template's ships listed
+     * (variants) is read as explicit: Saga Forge writes a named fleet resolved, as explicit with its
+     * {@code template} id.
+     */
+    public static boolean parseFleet(EncounterDef e, JSONObject f, String path, JsonReader r) {
+        e.faction = r.str(f, "faction", path, true, null);
+        if (e.faction == null) return false;
+        e.fleetType = r.str(f, "type", path, false, "patrolMedium");
+        e.size = r.str(f, "size", path, false, "fp");
+        if ("template".equals(e.size)) {
+            if (r.strings(f, "variants", path).isEmpty()) {
+                r.error(JsonReader.at(path, "size"), "size \"template\" needs the template's ships in \"variants\" (written resolved, as explicit); no fleet");
+                return false;
+            }
+            e.size = "explicit";
+        }
+        if (!"fp".equals(e.size) && !"explicit".equals(e.size)) {
+            r.error(JsonReader.at(path, "size"), "unknown size \"" + e.size + "\" (fp or explicit)");
+            return false;
+        }
+        Double pts = r.num(f, "points", path, 50d);
+        e.points = pts == null ? 50 : pts.floatValue();
+        e.sizeScale = lastai.sagalib.core.Settings.Scale.parse(f, "sizeScale", path, r);
+        e.variants.addAll(r.strings(f, "variants", path));
+        if (e.explicit() && e.variants.isEmpty()) {
+            r.error(JsonReader.at(path, "variants"), "an explicit fleet needs at least one variant");
+            return false;
+        }
+        Double q = r.num(f, "quality", path, null);
+        e.quality = q == null ? null : q.floatValue();
+        e.flagshipCommander = r.str(f, "flagshipCommander", path, false, "");
+        e.fleetName = r.str(f, "name", path, false, "");
+        e.shipNames.addAll(r.strings(f, "shipNames", path));
+        Double fs = r.num(f, "flagship", path, -1d);
+        e.flagship = fs == null ? -1 : (int) Math.round(fs);
+        e.template = emptyToNull(r.str(f, "template", path, false, ""));
+        Boolean cd = r.bool(f, "captainDiesOnDefeat", path, false);
+        e.captainDiesOnDefeat = cd != null && cd;
+        // SagaLib 1.4 (#67 U40): a random part for an explicit fleet, and extra groups
+        Double rp = r.num(f, "randomPoints", path, 0d);
+        e.randomPoints = rp == null ? 0 : Math.max(0, rp.floatValue());
+        org.json.JSONArray ex = f.optJSONArray("extras");
+        for (int i = 0; ex != null && i < ex.length(); i++) {
+            JSONObject g = ex.optJSONObject(i);
+            String gp = JsonReader.at(JsonReader.at(path, "extras"), i);
+            if (g == null) { r.error(gp, "an extra group is {\"chance\": 0.5, \"pick\": \"all\" or a number, \"ships\": [...]}; skipped"); continue; }
+            lastai.sagalib.core.FleetExtras.Group grp = new lastai.sagalib.core.FleetExtras.Group();
+            Double ch = r.num(g, "chance", gp, 1d);
+            grp.chance = ch == null ? 1f : (float) Math.max(0, Math.min(1, ch));
+            Object pk = g.opt("pick");
+            grp.pick = pk instanceof Number ? Math.max(0, ((Number) pk).intValue()) : 0;
+            org.json.JSONArray ships = g.optJSONArray("ships");
+            for (int k = 0; ships != null && k < ships.length(); k++) {
+                Object s = ships.opt(k);
+                if (s instanceof String) { grp.variants.add((String) s); grp.weights.add(1f); }
+                else if (s instanceof JSONObject && !((JSONObject) s).optString("variant", "").isEmpty()) {
+                    grp.variants.add(((JSONObject) s).optString("variant"));
+                    grp.weights.add((float) ((JSONObject) s).optDouble("weight", 1));
+                }
+            }
+            if (grp.variants.isEmpty()) r.warn(gp, "an extra group without ships; it adds nothing");
+            e.extras.add(grp);
+        }
+        return true;
     }
 
     private static boolean bool(JsonReader r, JSONObject o, String key, boolean def) {

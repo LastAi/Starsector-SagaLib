@@ -18,6 +18,7 @@ import java.util.Map;
  * guarded bridge (loaded by class name only when LunaLib is enabled, like {@link MagicBounties}),
  * else the defaults from the mod's own LunaSettings.csv. A change saved in LunaLib's menu while a
  * campaign runs is applied at once. Nothing here is saved: the keys are written again on every load.
+ * SagaLib 1.4: except the values recorded when the game started ({@link #record}), which versions use.
  */
 public final class ModSettings {
     private ModSettings() {}
@@ -81,9 +82,39 @@ public final class ModSettings {
         }
     }
 
-    private static List<Settings.Applied> applyMod(List<Settings.Field> fields) {
+    /**
+     * SagaLib 1.4 (Saga Forge #67 U18): records each field's value in this save if it isn't yet
+     * ({@link Settings#record}): at a new game before versions are chosen, and on every load (a save
+     * from before 1.4, or a field a mod's update added, gets the value it has now). Never changes a
+     * recorded value: versions by a setting stay as the game started.
+     */
+    public static synchronized void record() {
+        // SagaLib 1.4 (Saga Forge #67 U37): the player's gender, which versions may depend on, fixed for this save
+        try {
+            com.fs.starfarer.api.characters.PersonAPI pl = Global.getSector() == null ? null : Global.getSector().getPlayerPerson();
+            String g = pl == null || pl.getGender() == null ? null : pl.getGender().name();
+            if (Settings.recordPlayerGender(GameMemory.global(), g)) SagaLog.info("the player's gender recorded for this game (versions by it use this): " + g);
+            else if (Settings.recorded(GameMemory.global(), Settings.PLAYER_GENDER) == null) SagaLog.warn("the player's gender isn't known yet (" + g + "): versions by it wait for a later load");
+        } catch (Throwable t) {
+            SagaLog.errorOnce("record-player-gender", "recording the player's gender failed", t);
+        }
+        if (byMod().isEmpty()) return;
+        if (!tried) {
+            tried = true;
+            bridge = load();
+        }
+        for (Map.Entry<String, List<Settings.Field>> e : byMod().entrySet()) {
+            List<Settings.Field> done = Settings.record(GameMemory.global(), e.getValue(), player());
+            if (done.isEmpty()) continue;
+            StringBuilder b = new StringBuilder();
+            for (Settings.Field f : done) b.append(b.length() == 0 ? "" : ", ").append(f.id).append(' ').append(Settings.recorded(GameMemory.global(), f.id));
+            SagaLog.info("settings of " + e.getKey() + " recorded for this game (versions by settings use these): " + b);
+        }
+    }
+
+    private static Settings.Player player() {
         final SettingsBridge b = bridge;
-        Settings.Player player = b == null ? null : new Settings.Player() {
+        return b == null ? null : new Settings.Player() {
             public Object value(Settings.Field f) {
                 try {
                     return b.value(f.mod, f.id, f.type);
@@ -93,7 +124,10 @@ public final class ModSettings {
                 }
             }
         };
-        List<Settings.Applied> done = Settings.apply(GameMemory.global(), fields, player);
+    }
+
+    private static List<Settings.Applied> applyMod(List<Settings.Field> fields) {
+        List<Settings.Applied> done = Settings.apply(GameMemory.global(), fields, player());
         for (Settings.Applied a : done) last.put(a.field.id, a);
         return done;
     }

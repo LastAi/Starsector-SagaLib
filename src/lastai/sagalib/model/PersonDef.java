@@ -11,6 +11,11 @@ public final class PersonDef {
     public String id;
     public String firstName;
     public String lastName;
+    /**
+     * SagaLib 1.4 (task #79): "oneName": true, a character with one name. It is kept in the last-name
+     * slot (moved there when only the first was given) and the first stays empty (core.Names).
+     */
+    public boolean oneName;
     /** MALE, FEMALE or ANY. */
     public String gender;
     public String faction;
@@ -56,6 +61,12 @@ public final class PersonDef {
         JSONObject name = r.obj(o, "name", path, false);
         p.firstName = name == null ? "" : r.str(name, "first", JsonReader.at(path, "name"), false, "");
         p.lastName = name == null ? "" : r.str(name, "last", JsonReader.at(path, "name"), false, "");
+        // SagaLib 1.4 (task #79): one name, in the last-name slot
+        Boolean one = r.bool(o, "oneName", path, false);
+        p.oneName = one != null && one;
+        String[] stored = lastai.sagalib.core.Names.stored(p.firstName, p.lastName, p.oneName);
+        p.firstName = stored[0];
+        p.lastName = stored[1];
         p.gender = r.str(o, "gender", path, false, "ANY");
         if (!"MALE".equals(p.gender) && !"FEMALE".equals(p.gender) && !"ANY".equals(p.gender)) {
             r.error(JsonReader.at(path, "gender"), "unknown gender \"" + p.gender + "\" (MALE, FEMALE or ANY); using ANY");

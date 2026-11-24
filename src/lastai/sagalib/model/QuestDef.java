@@ -75,6 +75,10 @@ public final class QuestDef {
         public int storyPoints;
         /** SagaLib 1.3 (task #62): scales {@link #credits} by a mod setting (null = never scaled). */
         public lastai.sagalib.core.Settings.Scale creditsScale;
+        /** SagaLib 1.4 (task #75): more credits = mult x a commodity target's value (null = none); quest = the reward's quest. */
+        public String targetCreditsVar;
+        public double targetCreditsMult = 1;
+        public String quest;
     }
 
     public static final class Timer {
@@ -114,6 +118,28 @@ public final class QuestDef {
         public String encounter;
         public String defeated;
         public String avoided;
+    }
+
+    /**
+     * SagaLib 1.4: a Fight node (SF_Fight &lt;quest&gt; &lt;node&gt;): a battle on the spot, like vanilla's
+     * salvage defenders. The fleet has an encounter's "fleet" shape (only its fleet fields are set).
+     */
+    public static final class Fight {
+        public String node;
+        /** Rule triggers fired in the same dialog after a win / after leaving or losing. */
+        public String won;
+        public String left;
+        /** The first engage option's text (vanilla's "Engage the automated defenses" when missing). */
+        public String engage;
+        public EncounterDef fleet;
+    }
+
+    /** SagaLib 1.4: the Fight nodes, by node id. */
+    public final List<Fight> fights = new ArrayList<Fight>();
+
+    public Fight fight(String node) {
+        for (Fight f : fights) if (f.node.equals(node)) return f;
+        return null;
     }
 
     public String id;
@@ -156,6 +182,19 @@ public final class QuestDef {
         public final List<Criterion> prefer = new ArrayList<Criterion>();
         /** RC-R4: a person at the picked colony (vanilla findOrCreatePerson), or null. */
         public TargetPerson person;
+        /** SagaLib 1.4 (task #75): pick commodity: which commodities and the amount (never null for a commodity pick). */
+        public CommodityPick commodity;
+    }
+
+    /** SagaLib 1.4 (task #75): a commodity target's commodities and amount (docs/FORMAT.md "Commodity targets"). */
+    public static final class CommodityPick {
+        /** vanilla (the 18 vanilla trade goods), any (every economy commodity) or list (ids). */
+        public String which = "vanilla";
+        public final List<String> ids = new ArrayList<String>();
+        /** econ (n economy units x econUnit) or cargo (n cargo units). */
+        public String unit = "econ";
+        public double n = 0.1;
+        public boolean perSize;
     }
 
     /** A person at a target colony: someone with one of the posts, else a new person of the faction (the colony's if empty). */
@@ -280,7 +319,7 @@ public final class QuestDef {
 
         for (JsonReader.Indexed e : r.objects(o, "rewards", path)) {
             Reward rw = parseReward(e.json, e.path, r);
-            if (rw != null) q.rewards.add(rw);
+            if (rw != null) { rw.quest = q.id; q.rewards.add(rw); }
         }
 
         for (JsonReader.Indexed e : r.objects(o, "timers", path)) {
@@ -303,6 +342,15 @@ public final class QuestDef {
             u.defeated = r.str(e.json, "defeated", e.path, false, "");
             u.avoided = r.str(e.json, "avoided", e.path, false, "");
             q.encounters.add(u);
+        }
+        for (JsonReader.Indexed e : r.objects(o, "fights", path)) {
+            Fight f = parseFight(q.id, e, r);
+            if (f == null) continue;
+            if (q.fight(f.node) != null) {
+                r.error(JsonReader.at(e.path, "node"), "fight node \"" + f.node + "\" is listed twice; the second one is skipped");
+                continue;
+            }
+            q.fights.add(f);
         }
         for (JsonReader.Indexed e : r.objects(o, "bountyWaits", path)) {
             BountyWait w = new BountyWait();
@@ -364,7 +412,7 @@ public final class QuestDef {
             Skip k = new Skip();
             for (JsonReader.Indexed e : r.objects(sk, "rewards", "$.skip")) {
                 Reward rw = parseReward(e.json, e.path, r);
-                if (rw != null) k.rewards.add(rw);
+                if (rw != null) { rw.quest = q.id; k.rewards.add(rw); }
             }
             k.unhide.addAll(r.strings(sk, "unhide", "$.skip"));
             q.skip = k;
@@ -373,6 +421,33 @@ public final class QuestDef {
     }
 
     /** A random target (quest "targets", or a scatter's "target"): pick, criteria, system first, person. */
+    /** One "fights" entry; null (logged) without a node or a usable fleet. Missing triggers: &lt;quest&gt;_&lt;node&gt;_won / _left. */
+    static Fight parseFight(String quest, JsonReader.Indexed e, JsonReader r) {
+        Fight f = new Fight();
+        f.node = r.str(e.json, "node", e.path, true, null);
+        if (f.node == null) return null;
+        f.node = f.node.trim();
+        if (f.node.isEmpty() || f.node.contains(" ")) {
+            r.error(JsonReader.at(e.path, "node"), "\"" + f.node + "\" is not a usable node id; skipped");
+            return null;
+        }
+        f.won = r.str(e.json, "won", e.path, false, "").trim();
+        if (f.won.isEmpty()) f.won = quest + "_" + f.node + "_won";
+        f.left = r.str(e.json, "left", e.path, false, "").trim();
+        if (f.left.isEmpty()) f.left = quest + "_" + f.node + "_left";
+        String engage = r.str(e.json, "engage", e.path, false, "");
+        f.engage = engage == null || engage.trim().isEmpty() ? null : engage.trim();
+        org.json.JSONObject fl = r.obj(e.json, "fleet", e.path, true);
+        if (fl == null) return null;
+        EncounterDef d = new EncounterDef();
+        d.id = quest + "_" + f.node;
+        d.name = d.id;
+        d.source = r.file;
+        if (!EncounterDef.parseFleet(d, fl, JsonReader.at(e.path, "fleet"), r)) return null;
+        f.fleet = d;
+        return f;
+    }
+
     public static Target parseTarget(JsonReader r, JsonReader.Indexed x, boolean needVar) {
         Target t = new Target();
         t.var = r.str(x.json, "var", x.path, needVar, null);
@@ -383,6 +458,7 @@ public final class QuestDef {
         t.systemFirst = sf != null && sf;
         parseCriteria(r, x, "require", t.require);
         parseCriteria(r, x, "prefer", t.prefer);
+        if ("commodity".equals(t.pick)) t.commodity = parseCommodity(r, x);
         JSONObject po = r.obj(x.json, "person", x.path, false);
         if (po != null) {
             TargetPerson tp = new TargetPerson();
@@ -394,6 +470,29 @@ public final class QuestDef {
             else t.person = tp;
         }
         return t;
+    }
+
+    /** SagaLib 1.4 (task #75): targets[].commodity: which, ids, amount {unit, n, perSize}; missing = the defaults. */
+    private static CommodityPick parseCommodity(JsonReader r, JsonReader.Indexed x) {
+        CommodityPick c = new CommodityPick();
+        JSONObject o = r.obj(x.json, "commodity", x.path, false);
+        if (o == null) return c;
+        String p = JsonReader.at(x.path, "commodity");
+        c.which = r.str(o, "which", p, false, "vanilla");
+        if (!"vanilla".equals(c.which) && !"any".equals(c.which) && !"list".equals(c.which)) { r.error(JsonReader.at(p, "which"), "unknown " + c.which + " (vanilla, any or list); uses vanilla"); c.which = "vanilla"; }
+        c.ids.addAll(r.strings(o, "ids", p));
+        if ("list".equals(c.which) && c.ids.isEmpty()) r.error(JsonReader.at(p, "ids"), "which is list, but no commodity ids");
+        JSONObject a = r.obj(o, "amount", p, false);
+        if (a != null) {
+            String ap = JsonReader.at(p, "amount");
+            c.unit = r.str(a, "unit", ap, false, "econ");
+            if (!"econ".equals(c.unit) && !"cargo".equals(c.unit)) { r.error(JsonReader.at(ap, "unit"), "unknown " + c.unit + " (econ or cargo); uses econ"); c.unit = "econ"; }
+            Double n = r.num(a, "n", ap, 0.1d);
+            c.n = n == null ? 0.1 : n;
+            Boolean ps = r.bool(a, "perSize", ap, false);
+            c.perSize = ps != null && ps;
+        }
+        return c;
     }
 
     private static void parseCriteria(JsonReader r, JsonReader.Indexed x, String key, List<Criterion> out) {
@@ -427,6 +526,13 @@ public final class QuestDef {
         Double credits = r.num(o, "credits", path, 0d);
         rw.credits = credits == null ? 0 : Math.round(credits);
         rw.creditsScale = lastai.sagalib.core.Settings.Scale.parse(o, "creditsScale", path, r);
+        // SagaLib 1.4 (task #75): credits for a commodity target's goods
+        JSONObject tc = r.obj(o, "targetCredits", path, false);
+        if (tc != null) {
+            rw.targetCreditsVar = r.str(tc, "var", JsonReader.at(path, "targetCredits"), true, null);
+            Double m = r.num(tc, "mult", JsonReader.at(path, "targetCredits"), 1d);
+            rw.targetCreditsMult = m == null ? 1 : m;
+        }
         for (JsonReader.Indexed e : r.objects(o, "rep", path)) {
             String f = r.str(e.json, "faction", e.path, true, null);
             Double a = r.num(e.json, "amount", e.path, null);

@@ -1,0 +1,34 @@
+{
+  "name": "SagaLib 1.4 (task #79): SF_RunPlugin: the line's class, quest, node and \"key=value\" arguments (each quoted, as the game needs; a $-value read from memory, a bare word true, split at the first =), and the result key: what the plugin returns (trimmed), unset for no result, a blank one or a failure; without quest and node the local key",
+  "quests": [],
+  "phrases": [],
+  "steps": [
+    { "do": "$global.pga_name = Ana\n$global.pga_n = 3" },
+    {
+      "plugin": "ok",
+      "do": "SF_RunPlugin pga.plugins.CoinFlip \"quest=pga_test\" \"node=flip\" \"chance=0.5\" \"text=Heads or tails?\" \"who=$global.pga_name\" \"n=$global.pga_n\" \"none=$global.pga_nothing\" \"eq=a=b\" loud",
+      "call": { "className": "pga.plugins.CoinFlip", "quest": "pga_test", "node": "flip", "args": { "chance": "0.5", "text": "Heads or tails?", "who": "Ana", "n": "3", "none": "", "eq": "a=b", "loud": "true" } },
+      "expect": { "$global.pga_test_flip_result": "ok" }
+    },
+    { "check": "$global.pga_test_flip_result == ok", "is": true },
+    { "plugin": " odd ", "do": "SF_RunPlugin pga.plugins.CoinFlip \"quest=pga_test\" \"node=flip\"", "expect": { "$global.pga_test_flip_result": "odd" } },
+    { "check": "$global.pga_test_flip_result == ok", "is": false },
+    { "plugin": null, "do": "SF_RunPlugin pga.plugins.CoinFlip \"quest=pga_test\" \"node=flip\"", "unset": ["$global.pga_test_flip_result"] },
+    { "plugin": "ok", "do": "SF_RunPlugin pga.plugins.CoinFlip \"quest=pga_test\" \"node=flip\"", "expect": { "$global.pga_test_flip_result": "ok" } },
+    { "plugin": "   ", "do": "SF_RunPlugin pga.plugins.CoinFlip \"quest=pga_test\" \"node=flip\"", "unset": ["$global.pga_test_flip_result"] },
+    { "plugin": "ok", "do": "SF_RunPlugin pga.plugins.CoinFlip \"quest=pga_test\" \"node=flip\"", "expect": { "$global.pga_test_flip_result": "ok" } },
+    { "plugin": { "throws": "on purpose" }, "do": "SF_RunPlugin pga.plugins.Broken \"quest=pga_test\" \"node=flip\"", "unset": ["$global.pga_test_flip_result"] },
+    {
+      "plugin": "done",
+      "do": "SF_RunPlugin pga.plugins.Other \"x=1\" \"quest=\"",
+      "call": { "className": "pga.plugins.Other", "quest": null, "node": null, "args": { "x": "1" } },
+      "expect": { "$sagaforge_plugin_result": "done" }
+    },
+    {
+      "plugin": null,
+      "do": "SF_RunPlugin pga.plugins.Other \"quest=pga_test\"",
+      "call": { "className": "pga.plugins.Other", "quest": "pga_test", "node": null, "args": {} },
+      "unset": ["$sagaforge_plugin_result"]
+    }
+  ]
+}

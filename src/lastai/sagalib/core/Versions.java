@@ -26,12 +26,20 @@ import java.util.TreeSet;
  * <li>{@link #choose}: picks an item's version once per save, from the start record
  * ({@link Mods#counts}), and stores it in {@code $global.sagaforge_ver_<kind>_<id>}.</li>
  * </ul>
+ * SagaLib 1.4 (Saga Forge #67 U18): a version may also need values of the mod's own settings
+ * ({@code settingsWith: ["<id>=<value>"]}), compared with the values recorded when the game started
+ * ({@link Settings#recorded}). In the sets of "mods" here (mentioned, on, keys) such a need is the
+ * token {@code setting:<id>=<value>}, so keys, subsets and quest flags work unchanged.
  */
 public final class Versions {
     private Versions() {}
 
     /** At most this many mods per item (2^6 = 64 versions are parsed at load). */
     public static final int MAX_MODS = 6;
+    /** SagaLib 1.4: at most this many combinations per item (mods on/off times each setting's values named + 1). */
+    public static final int MAX_COMBINATIONS = 64;
+    /** SagaLib 1.4: the prefix of a setting token ({@code setting:<id>=<value>}). */
+    public static final String SETTING = "setting:";
     public static final String BASE = "base";
     public static final List<String> KINDS = Collections.unmodifiableList(Arrays.asList(
             "quest", "person", "system", "encounter", "pool", "events", "progress", "scatter", "factions"));
@@ -72,11 +80,17 @@ public final class Versions {
         final List<String> with = new ArrayList<String>();
         final List<String> without = new ArrayList<String>();
         final List<List<String>> any = new ArrayList<List<String>>();
+        /** SagaLib 1.4: settingsWith as tokens ("setting:<id>=<value>"). */
+        final List<String> settings = new ArrayList<String>();
+        /** An unusable settingsWith: never holds. */
+        boolean never;
         JSONObject set = new JSONObject();
 
-        int specificity() { return with.size() + without.size() + any.size(); }
+        int specificity() { return with.size() + without.size() + any.size() + settings.size(); }
 
         boolean holds(Set<String> on) {
+            if (never) return false;
+            for (String t : settings) if (!on.contains(t)) return false;
             for (String m : with) if (!on.contains(m)) return false;
             for (String m : without) if (on.contains(m)) return false;
             for (List<String> g : any) {
@@ -147,6 +161,24 @@ public final class Versions {
                     if (!group.isEmpty()) v.any.add(group);
                 }
             }
+            // SagaLib 1.4: "<setting id>=<value>" entries
+            if (o.has("settingsWith")) {
+                JSONArray sw = o.optJSONArray("settingsWith");
+                if (sw == null) {
+                    errors.add(at + ".settingsWith: should be a list of \"<setting id>=<value>\"; the version never applies");
+                    v.never = true;
+                }
+                for (int k = 0; sw != null && k < sw.length(); k++) {
+                    String e = sw.optString(k, "").trim();
+                    int eq = e.indexOf('=');
+                    if (eq <= 0 || e.indexOf('+') >= 0) {
+                        errors.add(at + ".settingsWith[" + k + "]: \"" + e + "\" isn't \"<setting id>=<value>\" (without \"+\"); the version never applies");
+                        v.never = true;
+                        continue;
+                    }
+                    v.settings.add(SETTING + e);
+                }
+            }
             if (o.has("set")) {
                 JSONObject s = o.optJSONObject("set");
                 if (s == null) errors.add(at + ".set: should be an object of path → value");
@@ -180,8 +212,32 @@ public final class Versions {
             s.addAll(v.with);
             s.addAll(v.without);
             for (List<String> g : v.any) s.addAll(g);
+            s.addAll(v.settings);
         }
         return new ArrayList<String>(s);
+    }
+
+    /** SagaLib 1.4: whether this is a setting token ({@code setting:<id>=<value>}). */
+    public static boolean isSetting(String token) { return token != null && token.startsWith(SETTING) && token.indexOf('=') > SETTING.length(); }
+
+    /** SagaLib 1.4: the setting id of a token (null for a mod). */
+    public static String settingId(String token) { return isSetting(token) ? token.substring(SETTING.length(), token.indexOf('=')) : null; }
+
+    /** SagaLib 1.4: the value of a token (null for a mod). */
+    public static String settingValue(String token) { return isSetting(token) ? token.substring(token.indexOf('=') + 1) : null; }
+
+    /** SagaLib 1.4: how many combinations the mentioned mods and setting tokens give (each mod on/off, each setting one of its values named or another). */
+    public static int combinations(List<String> mentioned) {
+        long n = 1;
+        Map<String, Integer> per = new TreeMap<String, Integer>();
+        for (String m : mentioned) {
+            String id = settingId(m);
+            if (id == null) n *= 2;
+            else per.put(id, (per.containsKey(id) ? per.get(id) : 1) + 1);
+            if (n > Integer.MAX_VALUE) break;
+        }
+        for (int k : per.values()) n *= k;
+        return (int) Math.min(n, Integer.MAX_VALUE);
     }
 
     // ---------------------------------------------------------------- resolution
@@ -409,15 +465,23 @@ public final class Versions {
         return out;
     }
 
-    /** Every subset of the mods (sorted lists; the empty one first). */
+    /** Every subset of the mods (sorted lists; the empty one first). SagaLib 1.4: none with two values of one setting. */
     public static List<List<String>> subsets(List<String> mods) {
         List<String> sorted = new ArrayList<String>(new TreeSet<String>(mods));
         List<List<String>> out = new ArrayList<List<String>>();
         int n = sorted.size();
+        if (n > 20) throw new IllegalArgumentException("too many mods and setting values (" + n + ")");
         for (int bits = 0; bits < (1 << n); bits++) {
             List<String> s = new ArrayList<String>();
-            for (int i = 0; i < n; i++) if ((bits & (1 << i)) != 0) s.add(sorted.get(i));
-            out.add(s);
+            Set<String> settings = new java.util.HashSet<String>();
+            boolean ok = true;
+            for (int i = 0; i < n && ok; i++) {
+                if ((bits & (1 << i)) == 0) continue;
+                String id = settingId(sorted.get(i));
+                if (id != null && !settings.add(id)) ok = false;
+                s.add(sorted.get(i));
+            }
+            if (ok) out.add(s);
         }
         return out;
     }
@@ -457,7 +521,7 @@ public final class Versions {
         List<String> got = chosen(m, kind, id, mentioned);
         if (got != null) return got;
         List<String> on = new ArrayList<String>();
-        for (String mod : mentioned) if (Mods.counts(m, owner, mod)) on.add(mod);
+        for (String mod : mentioned) if (counts(m, owner, mod, kind + " " + id)) on.add(mod);
         Collections.sort(on);
         m.set(memKey(kind, id), key(on));
         if ("quest".equals(kind)) for (String mod : on) m.set(questFlag(id, mod), Boolean.TRUE);
@@ -465,6 +529,24 @@ public final class Versions {
     }
 
     public static List<String> choose(Memory m, Item it) { return choose(m, it.kind, it.id, it.owner, it.mentioned); }
+
+    /**
+     * A mod counts by the start record ({@link Mods#counts}); SagaLib 1.4: a setting token when the
+     * value recorded at the start of the game ({@link Settings#recorded}) is its value. A setting
+     * with no recorded value (not a setting of any content mod) never holds, logged once.
+     */
+    static boolean counts(Memory m, String owner, String token, String who) {
+        String sid = settingId(token);
+        if (sid == null) return Mods.counts(m, owner, token);
+        String rec = Settings.recorded(m, sid);
+        if (rec == null && Settings.PLAYER_GENDER.equals(sid)) return false; // not known yet (logged by ModSettings.record)
+        if (rec == null) {
+            lastai.sagalib.SagaLog.warnOnce("versions-setting:" + sid, "versions: " + who + " names the setting " + sid
+                    + ", which no content mod's LunaSettings.csv has (nothing recorded at the start of this game): its versions with it never apply");
+            return false;
+        }
+        return rec.equals(settingValue(token));
+    }
 
     // ---------------------------------------------------------------- text.json versions
 

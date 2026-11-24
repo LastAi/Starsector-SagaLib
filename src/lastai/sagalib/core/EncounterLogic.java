@@ -169,11 +169,28 @@ public final class EncounterLogic {
      * "encounters" entry), or null. Only a spawned encounter resolves, so an outcome fires once.
      */
     public static String resolve(Memory m, EncounterDef e, Map<String, QuestDef> quests, boolean defeated, double now) {
-        if (!isSpawned(m, e.id)) return null;
+        java.util.List<String> all = resolveAll(m, e, quests, defeated, now);
+        return all.isEmpty() ? null : all.get(0);
+    }
+
+    /**
+     * SagaLib 1.4 (Saga Forge #67 U46): every trigger the outcome fires, in order: the encounter's
+     * own (its outcome actions, whoever spawned it), then the owning quest's Encounter node exit.
+     * Before 1.4 the encounter's own trigger replaced the quest's.
+     */
+    public static java.util.List<String> resolveAll(Memory m, EncounterDef e, Map<String, QuestDef> quests, boolean defeated, double now) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        if (!isSpawned(m, e.id)) return out;
         m.set(stateKey(e.id), defeated ? DEFEATED : AVOIDED);
         m.set(goneKey(e.id), Float.valueOf((float) now));
-        String trigger = defeated ? e.defeated : e.avoided;
-        if (trigger != null) return trigger;
+        String own = defeated ? e.defeated : e.avoided;
+        if (own != null) out.add(own);
+        String q = questTrigger(m, e, quests, defeated);
+        if (q != null && !q.equals(own)) out.add(q);
+        return out;
+    }
+
+    private static String questTrigger(Memory m, EncounterDef e, Map<String, QuestDef> quests, boolean defeated) {
         Object recorded = m.get(questKey(e.id));
         QuestDef q = recorded != null ? quests.get(Values.str(recorded)) : null;
         if (q == null) q = questFor(e, quests);

@@ -34,6 +34,8 @@ public final class SagaLibModPlugin extends BaseModPlugin {
     public void onNewGame() {
         // SagaLib 1.3: record which optional and incompatible mods this game starts with, before anything uses them
         step("mods", new Runnable() { public void run() { lastai.sagalib.core.Mods.resetSkipped(); lastai.sagalib.game.ModNotices.run(false); } });
+        // SagaLib 1.4: record the mods' settings as this game starts with them (versions by a setting use these, for good)
+        step("settings record", new Runnable() { public void run() { lastai.sagalib.game.ModSettings.record(); } });
         // SagaLib 1.3: each item's version by installed mods, chosen from the record before systems are built
         step("versions", new Runnable() { public void run() { lastai.sagalib.game.ItemVersions.run(); } });
         // like a SectorGeneratorPlugin: new systems (with their markets) and additions to existing ones
@@ -73,10 +75,13 @@ public final class SagaLibModPlugin extends BaseModPlugin {
             }
         });
         // SagaLib 1.3 (task #62): the mods' settings as $global.<id> (LunaLib's values, else the defaults), before anything reads quests
-        step("settings", new Runnable() { public void run() { lastai.sagalib.game.ModSettings.apply(); } });
+        // SagaLib 1.4: a save from before 1.4 (or a field an update added) records the values it has now; recorded ones never change
+        step("settings", new Runnable() { public void run() { lastai.sagalib.game.ModSettings.record(); lastai.sagalib.game.ModSettings.apply(); } });
         // SagaLib 1.3: versions by installed mods: choose new items, put this save's versions in place
         step("versions", new Runnable() { public void run() { lastai.sagalib.game.ItemVersions.run(); } });
         step("phrases", new Runnable() { public void run() { PhraseTokens.register(); lastai.sagalib.game.TextTokens.register(); } });
+        // SagaLib 1.4 (task #79): one-name people's first-name tokens; only here, after vanilla's generator (OneNameTokens)
+        step("one-name tokens", new Runnable() { public void run() { lastai.sagalib.game.OneNameTokens.register(); } });
         step("systems", new Runnable() { public void run() { SystemBuilder.onGameLoad(); SystemBuilder.applyWorldChanges(); } });
         // SagaLib 1.3 (task #61): Nexerelin never invades the markets marked so
         step("invasion protection", new Runnable() { public void run() { SystemBuilder.protectMarkets(); } });

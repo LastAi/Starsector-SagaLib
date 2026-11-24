@@ -69,6 +69,14 @@ public final class GameMemory implements Memory {
     }
 
     @Override
+    public void set(String key, Object value, float days) {
+        Ref r = ref(key);
+        if (r.memory == null) return;
+        if (value == null) r.memory.unset(r.name);
+        else r.memory.set(r.name, value, days);
+    }
+
+    @Override
     public void unset(String key) {
         Ref r = ref(key);
         if (r.memory != null) r.memory.unset(r.name);

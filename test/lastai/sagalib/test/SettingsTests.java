@@ -135,6 +135,41 @@ public final class SettingsTests {
         T.eq(null, Settings.read(f.get(1), Double.valueOf(4.5)), "4.5 isn't an Int");
     }
 
+    /** SagaLib 1.4 (Saga Forge #67 U18): the values at the start of the game, recorded once. */
+    public static void recordKeepsTheValueTheGameStartedWith() throws Exception {
+        Problems p = new Problems();
+        List<Settings.Field> f = read(p,
+                row("fieldID", "on", "fieldType", "Boolean", "defaultValue", "false"),
+                row("fieldID", "r", "fieldType", "Radio", "defaultValue", "A", "secondaryValue", "A,B"),
+                row("fieldID", "n", "fieldType", "Int", "defaultValue", "5"));
+        MapMemory m = new MapMemory();
+        final JSONObject player = new JSONObject().put("on", Boolean.TRUE).put("r", "C");
+        List<Settings.Field> done = Settings.record(m, f, new Settings.Player() {
+            public Object value(Settings.Field fd) { return player.opt(fd.id); }
+        });
+        T.eq(3, done.size(), "every field recorded");
+        T.eq("true", Settings.recorded(m, "on"), "the player's Boolean, as text");
+        T.eq("A", Settings.recorded(m, "r"), "a Radio value outside the choices: the default");
+        T.eq("5", Settings.recorded(m, "n"), "an Int without .0");
+        T.eq("true", m.get("$global.sagaforge_setting_on"), "the memory key");
+        T.eq(null, m.get("$global.on"), "recording doesn't set the live value");
+        final JSONObject later = new JSONObject().put("on", Boolean.FALSE).put("r", "B");
+        done = Settings.record(m, f, new Settings.Player() {
+            public Object value(Settings.Field fd) { return later.opt(fd.id); }
+        });
+        T.eq(0, done.size(), "nothing recorded again");
+        T.eq("true", Settings.recorded(m, "on"), "a later change doesn't change the record");
+        Settings.apply(m, f, new Settings.Player() {
+            public Object value(Settings.Field fd) { return later.opt(fd.id); }
+        });
+        T.eq(Boolean.FALSE, m.get("$global.on"), "the live value follows LunaLib");
+        T.eq("true", Settings.recorded(m, "on"), "the record stays");
+        T.eq(null, Settings.recorded(m, "unknown"), "not a setting: nothing recorded");
+        MapMemory old = new MapMemory();
+        Settings.record(old, f, null);
+        T.eq("false", Settings.recorded(old, "on"), "without LunaLib: the default");
+    }
+
     static Settings.Scale scale(String singleQuoted) throws Exception {
         Problems p = new Problems();
         Settings.Scale s = Settings.Scale.parse(Fx.json("{'s':" + singleQuoted + "}"), "s", "$", new JsonReader("t.json", p));

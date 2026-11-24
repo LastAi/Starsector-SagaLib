@@ -16,8 +16,21 @@ import lastai.sagalib.core.Effects;
 /** Rewards in game, each with vanilla's text line in the dialog ({@code text} may be null: no lines). */
 public final class GameEffects implements Effects {
     private final TextPanelAPI text;
+    /** SagaLib 1.4 (quiet ops): no dialog; credits, items, XP and story points show as campaign messages. */
+    private final boolean messages;
 
-    public GameEffects(TextPanelAPI text) { this.text = text; }
+    public GameEffects(TextPanelAPI text) { this(text, false); }
+
+    private GameEffects(TextPanelAPI text, boolean messages) {
+        this.text = text;
+        this.messages = messages;
+    }
+
+    /**
+     * SagaLib 1.4: outside any dialog, with what the player sees as vanilla's campaign messages
+     * (lower left). Reputation already does that by itself without a text panel (CoreReputationPlugin).
+     */
+    public static GameEffects withMessages() { return new GameEffects(null, true); }
 
     private static CargoAPI cargo() { return Global.getSector().getPlayerFleet().getCargo(); }
 
@@ -30,6 +43,7 @@ public final class GameEffects implements Effects {
             cargo().getCredits().subtract(-amount);
             if (text != null) AddRemoveCommodity.addCreditsLossText((int) -amount, text);
         }
+        if (messages && amount != 0) CampaignMessages.credits(amount);
     }
 
     private static CustomRepImpact impact(double points) {
@@ -59,7 +73,9 @@ public final class GameEffects implements Effects {
     }
 
     @Override
-    public void item(String item, int qty) { Items.change(cargo(), item, qty, text); }
+    public void item(String item, int qty) {
+        if (Items.change(cargo(), item, qty, text) && messages) CampaignMessages.item(item, qty);
+    }
 
     @Override
     public void ship(String variant) {
@@ -70,10 +86,17 @@ public final class GameEffects implements Effects {
     }
 
     @Override
-    public void xp(long xp) { Global.getSector().getPlayerStats().addXP(xp, text); }
+    public void xp(long xp) {
+        // without a dialog: the game's own XP message (withMessage), as for XP gained in the campaign
+        if (messages) Global.getSector().getPlayerStats().addXP(xp, null, true);
+        else Global.getSector().getPlayerStats().addXP(xp, text);
+    }
 
     @Override
-    public void storyPoints(int points) { Global.getSector().getPlayerStats().addStoryPoints(points, text, false); }
+    public void storyPoints(int points) {
+        Global.getSector().getPlayerStats().addStoryPoints(points, text, false);
+        if (messages) CampaignMessages.storyPoints(points);
+    }
 
     /** Vanilla's salvage roller on one drop group; the items go to the player with "Gained …" lines. */
     @Override

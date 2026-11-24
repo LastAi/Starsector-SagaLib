@@ -31,12 +31,6 @@ public class SF_Progress extends SagaCommand {
             SagaLog.error(name() + " in rule " + ruleId + ": \"" + args.get(1) + "\" isn't a number of points");
             return false;
         }
-        SagaProgressEvent e = SagaProgressEvent.getOrStart(args.get(0));
-        if (e == null) {
-            SagaLog.warn(name() + " in rule " + ruleId + ": progress event \"" + args.get(0) + "\" isn't defined or has ended");
-            return false;
-        }
-        e.addPoints(points, args.size() > 2 ? args.get(2) : "", dialog);
-        return true;
+        return SagaProgressEvent.oneTime(args.get(0), points, args.size() > 2 ? args.get(2) : "", dialog, name() + " in rule " + ruleId);
     }
 }

@@ -80,6 +80,32 @@ public final class Content {
 
     public QuestDef quest(String id) { return id == null ? null : quests.get(id); }
 
+    /**
+     * SagaLib 1.4: the op list SagaLib runs itself for a queued trigger (a world event's start / end, a
+     * progress stage's or outcome's actions), or null: fire the trigger in a dialog, as before.
+     */
+    public List<QuietOps.Op> quietOps(String trigger) {
+        if (trigger == null) return null;
+        if (trigger.startsWith("SF_event_")) {
+            for (lastai.sagalib.model.EventsDef d : events.values()) {
+                List<QuietOps.Op> l = EventLogic.quietOps(d, trigger);
+                if (l != null) return l;
+            }
+        } else if (trigger.startsWith("SF_enc_")) {
+            // SagaLib 1.4 (Saga Forge #67 U46): an encounter's own outcome actions
+            for (lastai.sagalib.model.EncounterDef d : encounters.values()) {
+                List<QuietOps.Op> l = d.quietOps(trigger);
+                if (l != null) return l;
+            }
+        } else if (trigger.startsWith("SF_progress_")) {
+            for (lastai.sagalib.model.ProgressDef d : progress.values()) {
+                List<QuietOps.Op> l = d.quietOps(trigger);
+                if (l != null) return l;
+            }
+        }
+        return null;
+    }
+
     public List<ProfileDef> profileList() { return Collections.unmodifiableList(new ArrayList<ProfileDef>(profiles.values())); }
 
     public static Content load(Source src) {
@@ -327,9 +353,16 @@ public final class Content {
         String kind = "people".equals(type) ? "person" : type;
         String ref = kind + ":" + itemId;
         List<String> mentioned = Versions.mentioned(raw);
-        if (mentioned.size() > Versions.MAX_MODS) {
+        int settingTokens = 0;
+        for (String x : mentioned) if (Versions.isSetting(x)) settingTokens++;
+        if (settingTokens == 0 && mentioned.size() > Versions.MAX_MODS) {
             problems.error(file, JsonReader.at(path, "versions"), "the versions name " + mentioned.size() + " mods " + mentioned + "; at most "
                     + Versions.MAX_MODS + " are supported: only the base is used");
+            mentioned = Collections.emptyList();
+        } else if (Versions.combinations(mentioned) > Versions.MAX_COMBINATIONS) {
+            // SagaLib 1.4: with setting values, the combinations count (each mod on/off, each setting one of the values named or another)
+            problems.error(file, JsonReader.at(path, "versions"), "the versions name " + mentioned + ": " + Versions.combinations(mentioned)
+                    + " combinations; at most " + Versions.MAX_COMBINATIONS + " are supported: only the base is used");
             mentioned = Collections.emptyList();
         }
         if (versioned.containsKey(ref)) {
